@@ -8,6 +8,8 @@ This MCP server provides prompts for creating and managing a fictional world thr
 from mcp.server.fastmcp import FastMCP
 from pathlib import Path
 import os
+import datetime
+import shutil
 
 # Initialize the MCP server
 mcp = FastMCP("Vibe Worldbuilding", dependencies=["markdown"])
@@ -79,7 +81,50 @@ def start_worldbuilding() -> str:
     """
     Initialize the worldbuilding process.
     """
-    return "Worldbuilding initialized! Let's begin your worldbuilding journey.\n\nI'll now ask you for details about your world concept, and then help you create the following:\n\n1. A world foundation document with your core world concept\n2. Taxonomy documents that classify the major elements\n3. Individual entries for specific elements of your world\n\nWhat kind of world would you like to create? Please describe the theme, concept, or key features."
+    # Create a timestamp-based world directory name that will be used until renamed
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    world_dir_name = f"World_{timestamp}"
+    
+    # Get user's desktop path (this is an estimation - in a real implementation,
+    # you would use a more robust method or make this configurable)
+    desktop_path = Path.home() / "Desktop"
+    
+    # Create the base world directory
+    world_dir = desktop_path / world_dir_name
+    os.makedirs(world_dir, exist_ok=True)
+    
+    # Create standard subdirectories
+    subdirs = [
+        "World_Foundation",
+        "Taxonomies",
+        "Elements"
+    ]
+    
+    for subdir in subdirs:
+        os.makedirs(world_dir / subdir, exist_ok=True)
+    
+    # Create placeholder README files with instructions
+    with open(world_dir / "README.md", "w", encoding="utf-8") as f:
+        f.write(f"# {world_dir_name}\n\nThis directory contains your worldbuilding project. The structure will be filled as you develop your world concept.\n\n"
+                f"## Directory Structure\n\n"
+                f"- **World_Foundation/**: Core concepts and foundational elements of your world\n"
+                f"- **Taxonomies/**: Classification systems for the major elements of your world\n"
+                f"- **Elements/**: Detailed entries for specific items, people, places, etc. in your world")
+    
+    with open(world_dir / "World_Foundation" / "README.md", "w", encoding="utf-8") as f:
+        f.write("# World Foundation\n\nThis directory will contain the core concepts and foundational elements of your world.\n\n"
+                "After you provide your world concept, we'll create:\n\n"
+                "- `core_concept.md`: The central idea of your world\n"
+                "- `world_overview.md`: A comprehensive overview of your world's setting\n"
+                "- Other foundational documents as needed")
+    
+    # Return a message to the user
+    return f"Worldbuilding initialized! I've created the basic file structure at: {world_dir}\n\n" \
+           f"I'll now ask you for details about your world concept, and then help you populate the following:\n\n" \
+           f"1. A world foundation document with your core world concept\n" \
+           f"2. Taxonomy documents that classify the major elements\n" \
+           f"3. Individual entries for specific elements of your world\n\n" \
+           f"What kind of world would you like to create? Please describe the theme, concept, or key features."
 
 # Run the server if executed directly
 if __name__ == "__main__":
