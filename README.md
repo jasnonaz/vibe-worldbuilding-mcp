@@ -1,112 +1,112 @@
 # Vibe Worldbuilding MCP
 
-A streamlined system for creating and managing fictional worlds.
+A Model Context Protocol (MCP) for creating detailed fictional worlds with Claude, complete with automatic image generation.
 
 ## Overview
 
-Vibe Worldbuilding is designed to help you create comprehensive fictional worlds with a seamless, integrated process. The system helps you develop:
+This MCP helps you build rich, cohesive fictional worlds through a structured approach to worldbuilding. It uses Claude's capabilities to help you develop concepts, explore details, and maintain consistency. The MCP can also generate images to visually represent your world's elements.
 
-1. **World Foundation**: Core concept documents detailing the fundamental aspects of your world
-2. **Taxonomies**: Classification systems for organizing the major elements of your world
-3. **Entries**: Detailed information about specific elements in your world
+## Installation
 
-## Setup Instructions
-
-### Installing the MCP
-
-1. Download the `vibe-worldbuilding-mcp` folder
-2. Ensure you have Python installed on your system
-3. Install follow this guide to get set up with MCP https://modelcontextprotocol.io/quickstart/user
-4. Start the server:
+1. Install the MCP CLI:
    ```
-   python vibe_worldbuilding_server.py
+   pip install mcp
    ```
 
-### Using with Claude Cloud Desktop
+2. Install required dependencies:
+   ```
+   pip install google-generativeai
+   ```
 
-If you're using Claude Cloud Desktop:
+3. Install the Vibe Worldbuilding MCP with your Google AI API key:
+   ```
+   cd /path/to/vibe-worldbuilding-mcp
+   mcp install vibe_worldbuilding_server.py -v IMAGEN_API_KEY=your_api_key_here
+   ```
 
-1. Ensure the File System MCP is installed and enabled
-2. Start a new chat with Claude
-3. Say "I want to start a new Vibe worldbuilding session"
-4. Claude will initialize the worldbuilding process
-5. Follow the prompts and verify that files and folders are being created in your chosen directory
+   The `-v` flag sets the environment variable needed for image generation. If you don't have a Google AI API key for Imagen, you can still use the MCP for worldbuilding, but the image generation feature won't work.
+
+   Alternatively, you can test the MCP in development mode:
+   ```
+   mcp dev vibe_worldbuilding_server.py -v IMAGEN_API_KEY=your_api_key_here
+   ```
 
 ## How to Use
 
-### Starting a New World
+The MCP provides several prompts to guide your worldbuilding process:
 
-1. Use the command `start_worldbuilding()` to initialize the process
-2. Share your world concept when prompted
-3. The system will automatically:
-   - Create necessary file structure
-   - Generate a world foundation document
-   - Develop initial taxonomies
+1. **start-worldbuilding** - Begin a new world project
+2. **continue-worldbuilding** - Resume work on an existing world
+3. **world-foundation** - Develop the core concepts of your world
+4. **taxonomy** - Create classification systems for world elements
+5. **world-entry** - Create detailed entries for specific elements
+6. **consistency-review** - Check for logical consistency
+7. **entry-revision** - Revise and improve existing entries
+8. **workflow** - Get guidance on the overall process
 
-### Main Workflows
+### Image Generation
 
-The MCP supports three main workflows:
-
-1. **Create/Update World Foundation**
-   - Establish or refine the core concepts of your world
-   - System will create the world foundation document in the proper format
-
-2. **Create/Update Taxonomies**
-   - Develop classification systems for major elements like regions, cultures, species, etc.
-   - System will generate taxonomy documents in the proper format
-
-3. **Create/Update Entries**
-   - Create detailed entries for specific elements mentioned in your world
-   - System will generate entry documents following appropriate templates
-
-## Project Structure
-
-The worldbuilding process will generate a directory structure like this:
+The MCP can generate images for your world elements. After creating a markdown file for an entry, taxonomy, or other element, use the `generate_image_from_markdown_file` tool:
 
 ```
-your_world/
-│
-├── overview/
-│   └── world_foundation.md
-│
-├── taxonomies/
-│   ├── regions.md
-│   ├── cultures.md
-│   └── ...
-│
-└── entries/
-    ├── place_one.md
-    ├── character_one.md
-    └── ...
+Use the generate_image_from_markdown_file tool with path="/path/to/your/file.md"
 ```
 
-## Future Development
+The tool will:
+1. Read the content of your markdown file
+2. Extract the title and description
+3. Generate an appropriate image using Google's Imagen API
+4. Save the image in an "images" folder next to your markdown file
 
-### Planned Features
+You can then upload the generated image to Claude to view it in your conversation.
 
-1. **Interlinking System**
-   - Create automatic connections between related entries
-   - Build a web of interlinked content that makes navigation intuitive
+## Worldbuilding Workflow
 
-2. **Frontend Viewer**
-   - Develop a web interface to browse and navigate your world
-   - Allow clicking between interlinked pages for seamless exploration
+1. Start with the **start-worldbuilding** prompt to begin
+2. For each new session, begin with **continue-worldbuilding**
+3. Develop your world in this order:
+   - World foundation (core concept and overview)
+   - Taxonomies (classification systems)
+   - Specific entries (detailed articles)
+4. Let your world grow organically by developing elements that interest you
+5. Generate images for your world elements to bring them to life visually
 
-3. **Image Generation**
-   - Automatically generate images for entries
-   - Visual representation of places, characters, and concepts
-   - Include images directly on frontend pages
+## Example Session
 
-### Current Status
+```
+User: Let's create a new world.
 
-The core functionality for world creation is implemented. The interlinking system, frontend viewer, and image generation features are under development.
+[User selects the "start-worldbuilding" prompt from the MCP menu]
 
-## Best Practices
+Claude: [Displays the worldbuilding prompt]
 
-- Start with a clear core concept
-- Let the system guide you through the development process
-- Focus on one aspect at a time (world foundation, taxonomies, entries)
-- Use the taxonomies to organize your thinking about different elements
-- Develop entries for the most interesting or important elements first
-- Allow your world to grow organically from the foundation
+User: I'd like to create a world where sound has magical properties.
 
+Claude: [Helps develop the concept and explores implications]
+
+User: Let's save this as my world overview file.
+
+Claude: [Saves the content to world-overview.md]
+
+User: Now generate an image for this overview.
+
+[User uses the generate_image_from_markdown_file tool]
+
+Claude: [Generates an image and saves it to disk]
+```
+
+## Requirements
+
+- A Google AI API key for Imagen (set as the IMAGEN_API_KEY environment variable)
+- Google Generative AI Python library (`google-generativeai`)
+- MCP CLI tool
+
+
+## Tips for Success
+
+- Build your world incrementally, starting with core concepts
+- Create clusters of related content
+- Review for consistency regularly
+- Focus on quality over quantity
+- Let your world emerge organically
+- Use generated images to inspire further worldbuilding

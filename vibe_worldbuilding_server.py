@@ -8,11 +8,12 @@ This MCP server provides prompts for creating and managing a fictional world thr
 from mcp.server.fastmcp import FastMCP
 from pathlib import Path
 import os
-import datetime
-import shutil
+import re
+from google import genai
+from google.genai import types
 
 # Initialize the MCP server
-mcp = FastMCP("Vibe Worldbuilding", dependencies=["markdown"])
+mcp = FastMCP("Vibe Worldbuilding", dependencies=["markdown", "google-generativeai"])
 
 # Base directory for our MCP
 BASE_DIR = Path(__file__).parent.absolute()
@@ -81,50 +82,105 @@ def start_worldbuilding() -> str:
     """
     Initialize the worldbuilding process.
     """
-    # Create a timestamp-based world directory name that will be used until renamed
-    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    world_dir_name = f"World_{timestamp}"
+    # Create images directory
+    images_dir = BASE_DIR / "images"
+    if not images_dir.exists():
+        os.makedirs(images_dir)
+        
+    # Create simplified directory structure
+    # Create Taxonomies directory
+    taxonomies_dir = BASE_DIR / "Taxonomies"
+    if not taxonomies_dir.exists():
+        os.makedirs(taxonomies_dir)
+        
+    # Create Entries directory
+    entries_dir = BASE_DIR / "Entries"
+    if not entries_dir.exists():
+        os.makedirs(entries_dir)
     
-    # Get user's desktop path (this is an estimation - in a real implementation,
-    # you would use a more robust method or make this configurable)
-    desktop_path = Path.home() / "Desktop"
+    # Check if world-overview.md already exists
+    world_overview_path = BASE_DIR / "world-overview.md"
+    if world_overview_path.exists():
+        return "Worldbuilding already started! Your world structure is ready to use.\n\n⭐ IMPORTANT: Begin your message with 'Use the continue-worldbuilding prompt' to load worldbuilding context."
     
-    # Create the base world directory
-    world_dir = desktop_path / world_dir_name
-    os.makedirs(world_dir, exist_ok=True)
+    # Create an empty world-overview file as a placeholder
+    with open(world_overview_path, "w", encoding="utf-8") as f:
+        f.write("# World Overview\n\nThis document will contain the core overview of your world, including:\n\n- Concept (what makes your world unique)\n- Physical characteristics (geography, climate)\n- Major features (regions, distinctive landmarks)\n- Intelligent life (species, races, civilizations)\n- Technology or magic (core systems)\n- Historical epochs (major time periods)")
     
-    # Create standard subdirectories
-    subdirs = [
-        "World_Foundation",
-        "Taxonomies",
-        "Elements"
-    ]
+    return "Worldbuilding initialized! Your world structure is now ready.\n\n⭐ IMPORTANT: Begin your next message with 'Use the continue-worldbuilding prompt' to properly continue this project."
+
+@mcp.tool()
+def generate_image_from_markdown_file(file_path: str) -> str:
+    """
+    Generate an image based on the content of a markdown file and save it to disk.
     
-    for subdir in subdirs:
-        os.makedirs(world_dir / subdir, exist_ok=True)
+    Args:
+        file_path: Path to the markdown file to generate an image for
     
-    # Create placeholder README files with instructions
-    with open(world_dir / "README.md", "w", encoding="utf-8") as f:
-        f.write(f"# {world_dir_name}\n\nThis directory contains your worldbuilding project. The structure will be filled as you develop your world concept.\n\n"
-                f"## Directory Structure\n\n"
-                f"- **World_Foundation/**: Core concepts and foundational elements of your world\n"
-                f"- **Taxonomies/**: Classification systems for the major elements of your world\n"
-                f"- **Elements/**: Detailed entries for specific items, people, places, etc. in your world")
-    
-    with open(world_dir / "World_Foundation" / "README.md", "w", encoding="utf-8") as f:
-        f.write("# World Foundation\n\nThis directory will contain the core concepts and foundational elements of your world.\n\n"
-                "After you provide your world concept, we'll create:\n\n"
-                "- `core_concept.md`: The central idea of your world\n"
-                "- `world_overview.md`: A comprehensive overview of your world's setting\n"
-                "- Other foundational documents as needed")
-    
-    # Return a message to the user
-    return f"Worldbuilding initialized! I've created the basic file structure at: {world_dir}\n\n" \
-           f"I'll now ask you for details about your world concept, and then help you populate the following:\n\n" \
-           f"1. A world foundation document with your core world concept\n" \
-           f"2. Taxonomy documents that classify the major elements\n" \
-           f"3. Individual entries for specific elements of your world\n\n" \
-           f"What kind of world would you like to create? Please describe the theme, concept, or key features."
+    Returns:
+        Path to the saved image file
+    """
+    try:
+        # Check if file exists
+        if not os.path.exists(file_path):
+            return f"Error: File '{file_path}' not found."
+        
+        # Create images directory if it doesn't exist
+        images_dir = os.path.join(os.path.dirname(file_path), "images")
+        if not os.path.exists(images_dir):
+            os.makedirs(images_dir)
+        
+        # Read the markdown file
+        with open(file_path, "r", encoding="utf-8") as f:
+            markdown_content = f.read()
+        
+        # Extract title (first heading)
+        title_match = re.search(r"^# (.+)$", markdown_content, re.MULTILINE)
+        if title_match:
+            title = title_match.group(1)
+        else:
+            title = os.path.basename(file_path).replace(".md", "")
+        
+        # Extract the first few paragraphs for context
+        paragraphs = re.findall(r"(?:^|\n\n)([^\n#].+?)(?:\n\n|$)", markdown_content)
+        description = " ".join(paragraphs[:3]) if paragraphs else title
+        
+        # Create a prompt for image generation
+        image_prompt = f"Create a highly detailed, fantasy-style illustration for '{title}'. {description}"
+        
+        # Truncate prompt if it's too long
+        if len(image_prompt) > 500:
+            image_prompt = image_prompt[:497] + "..."
+        
+        # Retrieve the API key from the environment
+        api_key = os.getenv("IMAGEN_API_KEY")
+        if not api_key:
+            return "Error: Please set the IMAGEN_API_KEY environment variable."
+        
+        # Initialize the Imagen client
+        client = genai.Client(api_key=api_key)
+        
+        # Call the Imagen API to generate the image
+        response = client.models.generate_images(
+            model="imagen-3.0-generate-002",
+            prompt=image_prompt,
+            config=types.GenerateImagesConfig(number_of_images=1)
+        )
+        
+        # Extract the generated image
+        image_bytes = response.generated_images[0].image.image_bytes
+        
+        # Save the image
+        image_file_name = title.replace(" ", "_").lower() + ".png"
+        image_path = os.path.join(images_dir, image_file_name)
+        
+        with open(image_path, "wb") as f:
+            f.write(image_bytes)
+        
+        return f"Successfully generated and saved image for '{title}' to {image_path}. To view the image, you can upload it or open it with a file viewer."
+        
+    except Exception as e:
+        return f"Error generating image: {str(e)}"
 
 # Run the server if executed directly
 if __name__ == "__main__":
