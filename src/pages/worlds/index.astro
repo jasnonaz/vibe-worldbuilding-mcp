@@ -1,0 +1,69 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import { readdir } from 'fs/promises';
+import { join } from 'path';
+
+// Find all world directories (those with overview folders)
+let worlds: string[] = [];
+try {
+  const items = await readdir(process.cwd());
+  for (const item of items) {
+    try {
+      const overviewPath = join(process.cwd(), item, 'overview');
+      await readdir(overviewPath);
+      worlds.push(item);
+    } catch {
+      // Not a world directory
+    }
+  }
+} catch {
+  // No worlds found
+}
+---
+
+<Layout title="All Worlds - Vibe Worldbuilder">
+  <div class="world-header">
+    <h1>All Worlds</h1>
+    <p>Browse and explore your created worlds.</p>
+  </div>
+
+  {worlds.length > 0 ? (
+    <div style="display: grid; gap: 2rem; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));">
+      {worlds.map(world => (
+        <article style="border: 1px solid #ddd; padding: 2rem; border-radius: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+          <h2 style="margin-top: 0;">
+            <a href={`/worlds/${world}`} style="text-decoration: none; color: #333;">
+              {world.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+            </a>
+          </h2>
+          <p style="color: #666; margin: 1rem 0;">
+            Explore this world's overview, taxonomies, and detailed entries.
+          </p>
+          <div style="display: flex; gap: 1rem; margin-top: 1rem;">
+            <a href={`/worlds/${world}`} style="color: #007acc; text-decoration: none; font-weight: 500;">
+              View Overview →
+            </a>
+            <a href={`/worlds/${world}/taxonomies`} style="color: #007acc; text-decoration: none;">
+              Browse Taxonomies
+            </a>
+          </div>
+        </article>
+      ))}
+    </div>
+  ) : (
+    <section>
+      <h2>No Worlds Created Yet</h2>
+      <p>Use the Vibe Worldbuilding MCP to create your first world!</p>
+      <div style="background: #f8f9fa; padding: 2rem; border-radius: 8px; margin-top: 2rem;">
+        <h3>Getting Started</h3>
+        <ol>
+          <li>Load the Vibe Worldbuilding MCP in Claude</li>
+          <li>Use the "start-worldbuilding" prompt</li>
+          <li>Create your world foundation</li>
+          <li>Use the "instantiate_world" tool to create the project structure</li>
+          <li>Build your static site to see it here!</li>
+        </ol>
+      </div>
+    </section>
+  )}
+</Layout>
