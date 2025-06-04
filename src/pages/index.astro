@@ -1,0 +1,75 @@
+---
+import Layout from '../layouts/Layout.astro';
+import { readdir } from 'fs/promises';
+import { join } from 'path';
+
+// Find all world directories (those with overview folders)
+let worlds: string[] = [];
+try {
+  const items = await readdir(process.cwd());
+  for (const item of items) {
+    try {
+      const overviewPath = join(process.cwd(), item, 'overview');
+      await readdir(overviewPath);
+      worlds.push(item);
+    } catch {
+      // Not a world directory
+    }
+  }
+} catch {
+  // No worlds found
+}
+---
+
+<Layout title="Vibe Worldbuilder" description="Static site generator for worldbuilding content">
+  <div class="world-header">
+    <h1>Vibe Worldbuilder</h1>
+    <p>Explore your fictional worlds through organized, beautiful static sites.</p>
+  </div>
+
+  {worlds.length > 0 ? (
+    <section>
+      <h2>Available Worlds</h2>
+      <div style="display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));">
+        {worlds.map(world => (
+          <div style="border: 1px solid #ddd; padding: 1.5rem; border-radius: 8px;">
+            <h3>
+              <a href={`/worlds/${world}`} style="text-decoration: none; color: #333;">
+                {world.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+              </a>
+            </h3>
+            <p style="color: #666; margin: 0.5rem 0;">
+              Click to explore this world's content, taxonomies, and entries.
+            </p>
+            <a href={`/worlds/${world}`} style="color: #007acc;">
+              Explore World →
+            </a>
+          </div>
+        ))}
+      </div>
+    </section>
+  ) : (
+    <section>
+      <h2>No Worlds Found</h2>
+      <p>Create a world using the Vibe Worldbuilding MCP to get started!</p>
+      <pre style="background: #f5f5f5; padding: 1rem; border-radius: 4px;">
+# In Claude with the MCP loaded:
+Use the "start-worldbuilding" prompt to create your first world.
+      </pre>
+    </section>
+  )}
+
+  <section style="margin-top: 3rem; padding-top: 2rem; border-top: 1px solid #eee;">
+    <h2>About</h2>
+    <p>
+      This static site is automatically generated from your worldbuilding content created 
+      with the <strong>Vibe Worldbuilding MCP</strong>. Each world includes:
+    </p>
+    <ul>
+      <li><strong>Overview</strong> - Core world concepts and foundation</li>
+      <li><strong>Taxonomies</strong> - Organized classification systems</li>
+      <li><strong>Entries</strong> - Detailed descriptions of world elements</li>
+      <li><strong>Images</strong> - AI-generated visuals for your content</li>
+    </ul>
+  </section>
+</Layout>

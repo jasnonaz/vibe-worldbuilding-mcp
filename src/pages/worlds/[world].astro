@@ -1,0 +1,189 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import { readdir, readFile } from 'fs/promises';
+import { join, basename } from 'path';
+
+export async function getStaticPaths() {
+  // Find all world directories
+  const worlds: string[] = [];
+  try {
+    const items = await readdir(process.cwd());
+    for (const item of items) {
+      try {
+        const overviewPath = join(process.cwd(), item, 'overview');
+        await readdir(overviewPath);
+        worlds.push(item);
+      } catch {
+        // Not a world directory
+      }
+    }
+  } catch {
+    // No worlds found
+  }
+
+  return worlds.map(world => ({
+    params: { world },
+  }));
+}
+
+const { world } = Astro.params;
+
+// Read world overview
+let worldOverview = '';
+let worldTitle = world?.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) || 'Unknown World';
+try {
+  const overviewPath = join(process.cwd(), world!, 'overview', 'world-overview.md');
+  worldOverview = await readFile(overviewPath, 'utf-8');
+  
+  // Extract title from markdown if present
+  const titleMatch = worldOverview.match(/^# (.+)$/m);
+  if (titleMatch) {
+    worldTitle = titleMatch[1];
+  }
+} catch {
+  worldOverview = `# ${worldTitle}\n\nWorld overview not found.`;
+}
+
+// Get taxonomies with their entries
+let taxonomies: { name: string; entries: string[] }[] = [];
+try {
+  const taxonomiesPath = join(process.cwd(), world!, 'taxonomies');
+  const files = await readdir(taxonomiesPath);
+  const taxonomyNames = files
+    .filter(file => file.endsWith('-overview.md'))
+    .map(file => file.replace('-overview.md', ''));
+  
+  for (const taxonomyName of taxonomyNames) {
+    let entries: string[] = [];
+    try {
+      const entriesPath = join(process.cwd(), world!, 'entries', taxonomyName);
+      const entryFiles = await readdir(entriesPath);
+      entries = entryFiles
+        .filter(file => file.endsWith('.md'))
+        .map(file => file.replace('.md', ''));
+    } catch {
+      // No entries for this taxonomy
+    }
+    taxonomies.push({ name: taxonomyName, entries });
+  }
+} catch {
+  // No taxonomies found
+}
+
+// Get images for this world
+let hasImages = false;
+try {
+  const imagesPath = join(process.cwd(), world!, 'images');
+  await readdir(imagesPath);
+  hasImages = true;
+} catch {
+  // No images directory
+}
+
+// Check for overview image
+let overviewImagePath = '';
+try {
+  const imagesPath = join(process.cwd(), world!, 'images');
+  const imageFiles = await readdir(imagesPath);
+  const overviewImage = imageFiles.find(file => 
+    file.startsWith('world-overview') && (file.endsWith('.png') || file.endsWith('.jpg') || file.endsWith('.jpeg'))
+  );
+  if (overviewImage) {
+    overviewImagePath = `/images/${world}/${overviewImage}`;
+  }
+} catch {
+  // No overview image
+}
+---
+
+<Layout title={`${worldTitle} - Vibe Worldbuilder`}>
+  <div class="world-header">
+    <nav style="margin-bottom: 1rem;">
+      <a href="/worlds" style="color: #666; text-decoration: none;">← All Worlds</a>
+    </nav>
+    <h1>{worldTitle}</h1>
+  </div>
+
+  {overviewImagePath && (
+    <img 
+      src={overviewImagePath} 
+      alt={`${worldTitle} overview`}
+      class="content-image"
+      style="max-height: 400px; object-fit: cover; width: 100%;"
+    />
+  )}
+
+  <div style="display: grid; gap: 2rem; grid-template-columns: 1fr 300px; margin-top: 2rem;">
+    <article>
+      <div set:html={worldOverview} />
+    </article>
+
+    <aside style="background: #f8f9fa; padding: 1.5rem; border-radius: 8px; height: fit-content; max-height: 80vh; overflow-y: auto;">
+      <h3 style="margin-top: 0;">Navigate This World</h3>
+      
+      <div style="margin-bottom: 2rem;">
+        <h4 style="margin: 0 0 0.5rem 0; font-size: 1rem; color: #333;">Overview</h4>
+        <div style="padding: 0.5rem; background: #e3f2fd; border-radius: 4px; border-left: 3px solid #2196f3;">
+          <span style="font-size: 0.9em; color: #1976d2; font-weight: 500;">
+            You are here
+          </span>
+        </div>
+      </div>
+
+      {taxonomies.length > 0 && (
+        <div style="margin-bottom: 2rem;">
+          <h4 style="margin: 0 0 1rem 0; font-size: 1rem; color: #333;">Taxonomies</h4>
+          {taxonomies.map(taxonomy => (
+            <div style="margin-bottom: 1rem; border: 1px solid #e0e0e0; border-radius: 6px; overflow: hidden;">
+              <div style="background: #fafafa; padding: 0.75rem; border-bottom: 1px solid #e0e0e0;">
+                <a 
+                  href={`/worlds/${world}/taxonomies/${taxonomy.name}`}
+                  style="color: #1976d2; text-decoration: none; font-weight: 500; display: block;"
+                >
+                  {taxonomy.name.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                </a>
+              </div>
+              {taxonomy.entries.length > 0 && (
+                <div style="padding: 0.5rem;">
+                  {taxonomy.entries.map(entry => (
+                    <a 
+                      href={`/worlds/${world}/taxonomies/${taxonomy.name}/entries/${entry}`}
+                      style="display: block; padding: 0.25rem 0.5rem; color: #666; text-decoration: none; font-size: 0.9em; border-radius: 3px; margin: 2px 0;"
+                      onmouseover="this.style.backgroundColor='#f0f8ff'; this.style.color='#333';"
+                      onmouseout="this.style.backgroundColor='transparent'; this.style.color='#666';"
+                    >
+                      {entry.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                    </a>
+                  ))}
+                </div>
+              )}
+              {taxonomy.entries.length === 0 && (
+                <div style="padding: 0.5rem; color: #999; font-size: 0.85em; font-style: italic;">
+                  No entries yet
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {hasImages && (
+        <div style="margin-bottom: 2rem;">
+          <h4 style="margin: 0 0 0.5rem 0; font-size: 1rem; color: #333;">Images</h4>
+          <a 
+            href={`/worlds/${world}/images`}
+            style="color: #007acc; text-decoration: none; font-size: 0.9em;"
+          >
+            Browse all images →
+          </a>
+        </div>
+      )}
+
+      {taxonomies.length === 0 && !hasImages && (
+        <p style="color: #666; font-size: 0.9em;">
+          This world is just getting started. Use the MCP to add taxonomies and entries!
+        </p>
+      )}
+    </aside>
+  </div>
+</Layout>

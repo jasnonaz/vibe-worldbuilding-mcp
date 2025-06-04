@@ -12,6 +12,25 @@ import mcp.server.stdio
 import mcp.types as types
 from pathlib import Path
 
+# Load environment variables from .env file
+def load_env_file(env_path: Path = None):
+    """Load environment variables from .env file"""
+    if env_path is None:
+        env_path = Path(__file__).parent / ".env"
+    
+    if env_path.exists():
+        with open(env_path, 'r') as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith('#') and '=' in line:
+                    key, value = line.split('=', 1)
+                    # Only set if not already in environment (allows override)
+                    if key.strip() not in os.environ:
+                        os.environ[key.strip()] = value.strip()
+
+# Load .env file at startup
+load_env_file()
+
 try:
     import requests
     FAL_AVAILABLE = True
@@ -587,6 +606,31 @@ async def handle_list_tools() -> list[types.Tool]:
                 },
                 "required": ["world_directory", "taxonomy", "entry_name", "entry_content"]
             }
+        ),
+        types.Tool(
+            name="build_static_site",
+            description="Build a static website for a specific world, outputting the site within the world directory",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "world_directory": {
+                        "type": "string",
+                        "description": "Path to the world directory to build a site for"
+                    },
+                    "action": {
+                        "type": "string",
+                        "description": "Action to perform: 'build' to generate static files, 'dev' to start development server, or 'preview' to preview built site",
+                        "enum": ["build", "dev", "preview"],
+                        "default": "build"
+                    },
+                    "site_dir": {
+                        "type": "string",
+                        "description": "Directory name within the world folder to output built files (default: site)",
+                        "default": "site"
+                    }
+                },
+                "required": ["world_directory"]
+            }
         )
     ]
     
@@ -1114,6 +1158,186 @@ This taxonomy contains all {taxonomy_name.lower()} elements in the world. Each e
             
         except Exception as e:
             return [types.TextContent(type="text", text=f"Error creating world entry: {str(e)}")]
+    
+    elif name == "build_static_site":
+        if not arguments:
+            return [types.TextContent(type="text", text="Error: world_directory is required")]
+        
+        world_directory = arguments.get("world_directory", "")
+        action = arguments.get("action", "build")
+        site_dir = arguments.get("site_dir", "site")
+        
+        if not world_directory:
+            return [types.TextContent(type="text", text="Error: world_directory is required")]
+        
+        try:
+            import subprocess
+            import sys
+            import shutil
+            
+            # Validate world directory exists
+            world_path = Path(world_directory)
+            if not world_path.exists():
+                return [types.TextContent(type="text", text=f"Error: World directory {world_directory} does not exist")]
+            
+            # Check if it's a valid world directory (has overview folder)
+            overview_path = world_path / "overview"
+            if not overview_path.exists():
+                return [types.TextContent(type="text", text=f"Error: {world_directory} is not a valid world directory (no overview folder found)")]
+            
+            # Get the directory where this script is located (should be the project root)
+            script_dir = Path(__file__).parent.absolute()
+            
+            # Check if we're in the right directory (should have astro.config.mjs)
+            astro_config_path = script_dir / "astro.config.mjs"
+            if not astro_config_path.exists():
+                return [types.TextContent(type="text", text=f"Error: astro.config.mjs not found in {script_dir}. Make sure Astro is configured in the project directory.")]
+            
+            # Check if node_modules exists
+            node_modules_path = script_dir / "node_modules"
+            if not node_modules_path.exists():
+                return [types.TextContent(type="text", text=f"Error: node_modules not found in {script_dir}. Run 'npm install' first.")]
+            
+            if action == "build":
+                # Create a temporary symlink of the world in the project directory so Astro can find it
+                world_name = world_path.name
+                temp_world_link = script_dir / world_name
+                
+                # Remove existing symlink if it exists
+                if temp_world_link.exists() or temp_world_link.is_symlink():
+                    if temp_world_link.is_symlink():
+                        temp_world_link.unlink()
+                    else:
+                        shutil.rmtree(temp_world_link)
+                
+                # Create symlink to the world directory
+                temp_world_link.symlink_to(world_path.absolute())
+                
+                # Copy images to public directory for the build
+                world_images_path = world_path / "images"
+                public_images_path = script_dir / "public" / "images" / world_name
+                
+                if world_images_path.exists():
+                    # Remove existing public images for this world
+                    if public_images_path.exists():
+                        shutil.rmtree(public_images_path)
+                    
+                    # Copy images to public directory
+                    shutil.copytree(world_images_path, public_images_path)
+                
+                try:
+                    # Build the static site
+                    result = subprocess.run(
+                        ["npm", "run", "build"],
+                        capture_output=True,
+                        text=True,
+                        timeout=300,  # 5 minutes timeout
+                        cwd=script_dir  # Run from the project directory
+                    )
+                    
+                    if result.returncode == 0:
+                        # Move the built site from dist to the world's site directory
+                        source_dist = script_dir / "dist"
+                        target_site = world_path / site_dir
+                        
+                        # Remove existing site directory if it exists
+                        if target_site.exists():
+                            shutil.rmtree(target_site)
+                        
+                        # Move the built site
+                        if source_dist.exists():
+                            shutil.move(str(source_dist), str(target_site))
+                            
+                            # Count generated files
+                            html_files = list(target_site.rglob("*.html"))
+                            asset_files = list(target_site.rglob("*.css")) + list(target_site.rglob("*.js"))
+                            
+                            return [types.TextContent(
+                                type="text",
+                                text=f"✅ Static site built successfully for {world_name}!\n\nSite location: {target_site.absolute()}\nGenerated {len(html_files)} HTML pages and {len(asset_files)} asset files.\n\nTo serve the site locally:\n- Navigate to {target_site}\n- Run 'python -m http.server 8000' or any static file server\n- Open http://localhost:8000"
+                            )]
+                        else:
+                            return [types.TextContent(
+                                type="text",
+                                text=f"Build completed but dist directory not found.\n\nBuild output:\n{result.stdout}\n\nErrors:\n{result.stderr}"
+                            )]
+                    else:
+                        return [types.TextContent(
+                            type="text",
+                            text=f"Build failed with exit code {result.returncode}\n\nErrors:\n{result.stderr}\n\nOutput:\n{result.stdout}"
+                        )]
+                finally:
+                    # Clean up the temporary symlink
+                    if temp_world_link.exists() or temp_world_link.is_symlink():
+                        temp_world_link.unlink()
+                    
+                    # Clean up public images
+                    public_images_path = script_dir / "public" / "images" / world_name
+                    if public_images_path.exists():
+                        shutil.rmtree(public_images_path)
+            
+            elif action == "dev":
+                # Create temporary symlink for development
+                world_name = world_path.name
+                temp_world_link = script_dir / world_name
+                
+                if temp_world_link.exists() or temp_world_link.is_symlink():
+                    if temp_world_link.is_symlink():
+                        temp_world_link.unlink()
+                    else:
+                        shutil.rmtree(temp_world_link)
+                
+                temp_world_link.symlink_to(world_path.absolute())
+                
+                # Create content symlinks that Astro expects
+                content_dir = script_dir / "src" / "content"
+                content_dir.mkdir(parents=True, exist_ok=True)
+                
+                # Create symlinks for the content directories
+                content_links = ["overview", "taxonomies", "entries"]
+                for link_name in content_links:
+                    link_path = content_dir / link_name
+                    source_path = world_path / link_name
+                    
+                    # Remove existing symlink if it exists
+                    if link_path.exists() or link_path.is_symlink():
+                        if link_path.is_symlink():
+                            link_path.unlink()
+                        else:
+                            shutil.rmtree(link_path)
+                    
+                    # Create symlink if source exists
+                    if source_path.exists():
+                        link_path.symlink_to(source_path.absolute())
+                
+                return [types.TextContent(
+                    type="text",
+                    text=f"✅ Development setup ready for {world_name}!\n\nTo start the development server:\n1. Open a terminal in {script_dir}\n2. Run: npm run dev\n3. Open http://localhost:4321\n\nNote: The world has been temporarily linked for development. The symlink will be cleaned up when you build the site."
+                )]
+            
+            elif action == "preview":
+                # Check if site directory exists in the world
+                site_path = world_path / site_dir
+                if not site_path.exists():
+                    return [types.TextContent(
+                        type="text",
+                        text=f"No built site found in {site_path}. Run the build action first."
+                    )]
+                
+                return [types.TextContent(
+                    type="text",
+                    text=f"To preview the built site for {world_path.name}:\n\n1. Navigate to: {site_path}\n2. Run: python -m http.server 8000\n3. Open: http://localhost:8000\n\nOr use any other static file server of your choice."
+                )]
+            
+            else:
+                return [types.TextContent(type="text", text=f"Unknown action: {action}. Use 'build', 'dev', or 'preview'.")]
+                
+        except subprocess.TimeoutExpired:
+            return [types.TextContent(type="text", text="Build timed out after 5 minutes. Your project might be too large or there may be an issue with the build process.")]
+        except FileNotFoundError:
+            return [types.TextContent(type="text", text="Error: npm not found. Make sure Node.js and npm are installed on your system.")]
+        except Exception as e:
+            return [types.TextContent(type="text", text=f"Error building static site: {str(e)}")]
     
     else:
         return [types.TextContent(type="text", text=f"Unknown tool: {name}")]
