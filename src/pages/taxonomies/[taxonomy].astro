@@ -1,0 +1,227 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import { readdir, readFile } from 'fs/promises';
+import { join } from 'path';
+
+export async function getStaticPaths() {
+  const paths: { params: { taxonomy: string } }[] = [];
+  
+  try {
+    const taxonomiesPath = join(process.cwd(), 'src/content/taxonomies');
+    const taxonomyFiles = await readdir(taxonomiesPath);
+    const taxonomies = taxonomyFiles
+      .filter(file => file.endsWith('-overview.md'))
+      .map(file => file.replace('-overview.md', ''));
+    
+    for (const taxonomy of taxonomies) {
+      paths.push({
+        params: { taxonomy },
+      });
+    }
+  } catch {
+    // Error reading directory
+  }
+
+  return paths;
+}
+
+const { taxonomy } = Astro.params;
+
+// Read taxonomy overview
+let taxonomyContent = '';
+let taxonomyTitle = taxonomy?.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) || 'Unknown Taxonomy';
+try {
+  const taxonomyPath = join(process.cwd(), 'src/content/taxonomies', `${taxonomy}-overview.md`);
+  const rawContent = await readFile(taxonomyPath, 'utf-8');
+  
+  // Extract title from markdown if present
+  const titleMatch = rawContent.match(/^# (.+)$/m);
+  if (titleMatch) {
+    taxonomyTitle = titleMatch[1];
+  }
+  
+  // Simple markdown to HTML conversion
+  taxonomyContent = rawContent
+    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+    .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+    .replace(/^\* (.+)$/gm, '<li>$1</li>')
+    .replace(/^- (.+)$/gm, '<li>$1</li>')
+    .replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\n\n/g, '</p><p>')
+    .replace(/^(?!<)(.+)$/gm, '<p>$1</p>')
+    .replace(/<p><\/p>/g, '');
+} catch {
+  taxonomyContent = `<h1>${taxonomyTitle}</h1><p>Taxonomy overview not found.</p>`;
+}
+
+// Get all taxonomies with their entries for sidebar
+let allTaxonomies: { name: string; entries: string[] }[] = [];
+try {
+  const taxonomiesPath = join(process.cwd(), 'src/content/taxonomies');
+  const files = await readdir(taxonomiesPath);
+  const taxonomyNames = files
+    .filter(file => file.endsWith('-overview.md'))
+    .map(file => file.replace('-overview.md', ''));
+  
+  for (const taxonomyName of taxonomyNames) {
+    let entries: string[] = [];
+    try {
+      const entriesPath = join(process.cwd(), 'src/content/entries', taxonomyName);
+      const entryFiles = await readdir(entriesPath);
+      entries = entryFiles
+        .filter(file => file.endsWith('.md'))
+        .map(file => file.replace('.md', ''));
+    } catch {
+      // No entries for this taxonomy
+    }
+    allTaxonomies.push({ name: taxonomyName, entries });
+  }
+} catch {
+  // No taxonomies found
+}
+
+// Get entries for current taxonomy
+const currentTaxonomy = allTaxonomies.find(t => t.name === taxonomy);
+const entries = currentTaxonomy?.entries || [];
+
+// Check for taxonomy image in public directory
+let taxonomyImagePath = '';
+try {
+  const publicImagesPath = join(process.cwd(), 'public', 'images');
+  const imageDirs = await readdir(publicImagesPath);
+  
+  if (imageDirs.length > 0) {
+    const worldImageDir = imageDirs[0];
+    
+    // Try taxonomy subdirectory first
+    try {
+      const imagesPath = join(publicImagesPath, worldImageDir, taxonomy!);
+      const imageFiles = await readdir(imagesPath);
+      const taxonomyImage = imageFiles.find(file => 
+        file.startsWith(`${taxonomy}-overview`) && (file.endsWith('.png') || file.endsWith('.jpg') || file.endsWith('.jpeg'))
+      );
+      if (taxonomyImage) {
+        taxonomyImagePath = `/images/${worldImageDir}/${taxonomy}/${taxonomyImage}`;
+      }
+    } catch {
+      // Try root images directory
+      try {
+        const imagesPath = join(publicImagesPath, worldImageDir);
+        const imageFiles = await readdir(imagesPath);
+        const taxonomyImage = imageFiles.find(file => 
+          file.startsWith(`${taxonomy}-overview`) && (file.endsWith('.png') || file.endsWith('.jpg') || file.endsWith('.jpeg'))
+        );
+        if (taxonomyImage) {
+          taxonomyImagePath = `/images/${worldImageDir}/${taxonomyImage}`;
+        }
+      } catch {
+        // No taxonomy image
+      }
+    }
+  }
+} catch {
+  // No images directory
+}
+
+// Get world title from overview
+let worldTitle = 'World';
+try {
+  const overviewPath = join(process.cwd(), 'src/content/overview', 'world-overview.md');
+  const worldOverview = await readFile(overviewPath, 'utf-8');
+  const titleMatch = worldOverview.match(/^# (.+)$/m);
+  if (titleMatch) {
+    worldTitle = titleMatch[1];
+  }
+} catch {
+  // Use default
+}
+---
+
+<Layout title={`${taxonomyTitle} - ${worldTitle}`} description={`${taxonomyTitle} taxonomy in ${worldTitle}`}>
+  <div style="padding: 2rem; padding-bottom: 0;">
+    <div class="world-header">
+      <nav style="margin-bottom: 1rem;">
+        <a href="/" style="color: #666; text-decoration: none;">Home</a>
+        <span style="color: #ccc; margin: 0 0.5rem;">›</span>
+        <span style="color: #333;">{taxonomyTitle}</span>
+      </nav>
+      <h1>{taxonomyTitle}</h1>
+      <p style="color: #666;">Topic in {worldTitle}</p>
+    </div>
+
+    {taxonomyImagePath && (
+      <img 
+        src={taxonomyImagePath} 
+        alt={`${taxonomyTitle} taxonomy`}
+        class="content-image"
+        style="max-height: 300px; object-fit: cover; width: 100%;"
+      />
+    )}
+  </div>
+
+  <div style="display: grid; gap: 2rem; grid-template-columns: 300px 1fr; margin-top: 2rem;">
+    <aside style="background: #f8f9fa; padding: 1.5rem; border-right: 1px solid #e0e0e0; height: 100vh; position: sticky; top: 0; overflow-y: auto;">
+      <h3 style="margin-top: 0;">Navigate This World</h3>
+      
+      <div style="margin-bottom: 2rem;">
+        <h4 style="margin: 0 0 0.5rem 0; font-size: 1rem; color: #333;">Overview</h4>
+        <div style="padding: 0.5rem; background: #f0f0f0; border-radius: 4px;">
+          <a 
+            href="/"
+            style="color: #666; text-decoration: none; font-size: 0.9em;"
+          >
+            {worldTitle} Overview
+          </a>
+        </div>
+      </div>
+
+      {allTaxonomies.length > 0 && (
+        <div style="margin-bottom: 2rem;">
+          <h4 style="margin: 0 0 1rem 0; font-size: 1rem; color: #333;">Taxonomies</h4>
+          {allTaxonomies.map(taxonomyItem => (
+            <div style="margin-bottom: 1rem; border: 1px solid #e0e0e0; border-radius: 6px; overflow: hidden;">
+              <div style={`background: ${taxonomyItem.name === taxonomy ? '#e3f2fd' : '#fafafa'}; padding: 0.75rem; border-bottom: 1px solid #e0e0e0; ${taxonomyItem.name === taxonomy ? 'border-left: 3px solid #2196f3;' : ''}`}>
+                <a 
+                  href={`/taxonomies/${taxonomyItem.name}`}
+                  style={`color: ${taxonomyItem.name === taxonomy ? '#1976d2' : '#1976d2'}; text-decoration: none; font-weight: ${taxonomyItem.name === taxonomy ? '600' : '500'}; display: block;`}
+                >
+                  {taxonomyItem.name.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                  {taxonomyItem.name === taxonomy && (
+                    <span style="font-size: 0.8em; color: #666; font-weight: normal; margin-left: 0.5rem;">
+                      (Current)
+                    </span>
+                  )}
+                </a>
+              </div>
+              {taxonomyItem.entries.length > 0 && (
+                <div style="padding: 0.5rem;">
+                  {taxonomyItem.entries.map(entry => (
+                    <a 
+                      href={`/taxonomies/${taxonomyItem.name}/entries/${entry}`}
+                      style="display: block; padding: 0.25rem 0.5rem; color: #666; text-decoration: none; font-size: 0.9em; border-radius: 3px; margin: 2px 0;"
+                      onmouseover="this.style.backgroundColor='#f0f8ff'; this.style.color='#333';"
+                      onmouseout="this.style.backgroundColor='transparent'; this.style.color='#666';"
+                    >
+                      {entry.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                    </a>
+                  ))}
+                </div>
+              )}
+              {taxonomyItem.entries.length === 0 && (
+                <div style="padding: 0.5rem; color: #999; font-size: 0.85em; font-style: italic;">
+                  No entries yet
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </aside>
+    
+    <article style="padding: 2rem;">
+      <div set:html={taxonomyContent} />
+    </article>
+  </div>
+</Layout>
