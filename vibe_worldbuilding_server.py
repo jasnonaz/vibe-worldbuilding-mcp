@@ -12,6 +12,25 @@ import mcp.server.stdio
 import mcp.types as types
 from pathlib import Path
 
+# Load environment variables from .env file
+def load_env_file(env_path: Path = None):
+    """Load environment variables from .env file"""
+    if env_path is None:
+        env_path = Path(__file__).parent / ".env"
+    
+    if env_path.exists():
+        with open(env_path, 'r') as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith('#') and '=' in line:
+                    key, value = line.split('=', 1)
+                    # Only set if not already in environment (allows override)
+                    if key.strip() not in os.environ:
+                        os.environ[key.strip()] = value.strip()
+
+# Load .env file at startup
+load_env_file()
+
 try:
     import requests
     FAL_AVAILABLE = True
@@ -587,6 +606,31 @@ async def handle_list_tools() -> list[types.Tool]:
                 },
                 "required": ["world_directory", "taxonomy", "entry_name", "entry_content"]
             }
+        ),
+        types.Tool(
+            name="build_static_site",
+            description="Build a static website for a specific world, outputting the site within the world directory",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "world_directory": {
+                        "type": "string",
+                        "description": "Path to the world directory to build a site for"
+                    },
+                    "action": {
+                        "type": "string",
+                        "description": "Action to perform: 'build' to generate static files, 'dev' to start development server, or 'preview' to preview built site",
+                        "enum": ["build", "dev", "preview"],
+                        "default": "build"
+                    },
+                    "site_dir": {
+                        "type": "string",
+                        "description": "Directory name within the world folder to output built files (default: site)",
+                        "default": "site"
+                    }
+                },
+                "required": ["world_directory"]
+            }
         )
     ]
     
@@ -871,21 +915,68 @@ async def handle_call_tool(name: str, arguments: dict[str, Any] | None) -> list[
 ## Description
 {taxonomy_desc}
 
-## Guidelines
-This taxonomy contains all {taxonomy_name.lower()} elements in the world. Each entry should:
-- Follow the world's established rules and themes
-- Reference this overview for consistency
-- Build upon the concepts described above
+## Classification Framework
+This taxonomy provides a systematic way to categorize and understand {taxonomy_name.lower()} within the world. When creating entries in this category, consider:
 
-## Related Elements
-[Connections to other taxonomies and world elements]
+- **Core characteristics** that define membership in this taxonomy
+- **Variations and subtypes** that exist within this classification
+- **Relationships** to other elements in the world
+- **Cultural or functional significance** within the broader worldbuilding context
 
----
-*Taxonomy created for {world_name}*
+## Development Guidelines
+Each {taxonomy_name.lower()} entry should explore:
+- Unique features that distinguish it from similar elements
+- Historical development or origins within the world
+- Impact on other systems, cultures, or regions
+- Potential for future development or change
+
+## Cross-References
+Consider how elements in this taxonomy connect to:
+- Other taxonomies in this world
+- The overall world themes and mechanics
+- Specific locations, cultures, or time periods
 """
                     with open(taxonomy_file, "w", encoding="utf-8") as f:
                         f.write(taxonomy_content)
                     created_folders.append(str(taxonomy_file.relative_to(base_path)))
+                    
+                    # Generate image for taxonomy if FAL_KEY is available
+                    if FAL_AVAILABLE and os.environ.get("FAL_KEY"):
+                        try:
+                            # Create taxonomy-specific prompt
+                            taxonomy_prompt = f"Conceptual illustration of {taxonomy_name}, {taxonomy_desc}, fantasy art style, detailed digital illustration"
+                            
+                            headers = {
+                                "Authorization": f"Key {os.environ.get('FAL_KEY')}",
+                                "Content-Type": "application/json"
+                            }
+                            
+                            payload = {
+                                "prompt": taxonomy_prompt,
+                                "aspect_ratio": "1:1",
+                                "num_images": 1
+                            }
+                            
+                            response = requests.post(
+                                "https://fal.run/fal-ai/imagen4/preview",
+                                headers=headers,
+                                json=payload
+                            )
+                            
+                            if response.status_code == 200:
+                                result = response.json()
+                                if "images" in result and result["images"]:
+                                    image_url = result["images"][0]["url"]
+                                    image_response = requests.get(image_url)
+                                    if image_response.status_code == 200:
+                                        # Save taxonomy image
+                                        taxonomy_image_path = world_path / "images" / f"{clean_name}-taxonomy.png"
+                                        with open(taxonomy_image_path, "wb") as f:
+                                            f.write(image_response.content)
+                                        created_folders.append(str(taxonomy_image_path.relative_to(base_path)))
+                        except Exception:
+                            # Silently continue if image generation fails
+                            pass
                     
                     # Create corresponding entry folder
                     entry_path = entries_path / clean_name
@@ -940,6 +1031,109 @@ As you develop your world, you'll identify key categories that need systematic d
             
             created_folders.append(str(readme_file.relative_to(base_path)))
             
+            # Generate overview images if FAL_KEY is available
+            image_generation_info = ""
+            fal_key = os.environ.get("FAL_KEY")
+            if fal_key:
+                try:
+                    # Extract key visual elements from the world content
+                    # We'll generate 3 images: header, atmosphere detail, and concept detail
+                    
+                    # 1. Generate main header image (wide landscape for the world)
+                    header_prompt = f"Epic wide landscape of {world_name}, fantasy digital art, cinematic composition"
+                    
+                    # Parse world content to extract more specific details
+                    if "desert" in world_content.lower():
+                        header_prompt = f"Epic desert landscape with futuristic elements, {world_name}, vast dunes and hidden technology, cinematic sci-fi art"
+                    elif "forest" in world_content.lower():
+                        header_prompt = f"Mystical forest landscape, {world_name}, ancient trees and magical atmosphere, fantasy digital art"
+                    elif "city" in world_content.lower() or "urban" in world_content.lower():
+                        header_prompt = f"Futuristic cityscape, {world_name}, towering structures and advanced technology, cyberpunk digital art"
+                    
+                    # Generate header image
+                    headers = {
+                        "Authorization": f"Key {fal_key}",
+                        "Content-Type": "application/json"
+                    }
+                    
+                    header_payload = {
+                        "prompt": header_prompt + ", cinematic digital art",
+                        "aspect_ratio": "16:9",
+                        "num_images": 1
+                    }
+                    
+                    header_response = requests.post(
+                        "https://fal.run/fal-ai/imagen4/preview",
+                        headers=headers,
+                        json=header_payload
+                    )
+                    
+                    header_result = header_response.json() if header_response.status_code == 200 else None
+                    
+                    if header_result and 'images' in header_result and header_result['images']:
+                        header_image_url = header_result['images'][0]['url']
+                        header_response = requests.get(header_image_url)
+                        if header_response.status_code == 200:
+                            header_path = world_path / "images" / "world-overview-header.png"
+                            with open(header_path, 'wb') as f:
+                                f.write(header_response.content)
+                            image_generation_info += "\n- Generated header image: world-overview-header.png"
+                    
+                    # 2. Generate atmosphere detail image
+                    atmosphere_prompt = f"Atmospheric detail from {world_name}, focusing on mood and environment, detailed fantasy illustration"
+                    
+                    atmosphere_payload = {
+                        "prompt": atmosphere_prompt,
+                        "aspect_ratio": "1:1",
+                        "num_images": 1
+                    }
+                    
+                    atmosphere_response = requests.post(
+                        "https://fal.run/fal-ai/imagen4/preview",
+                        headers=headers,
+                        json=atmosphere_payload
+                    )
+                    
+                    atmosphere_result = atmosphere_response.json() if atmosphere_response.status_code == 200 else None
+                    
+                    if atmosphere_result and 'images' in atmosphere_result and atmosphere_result['images']:
+                        atmosphere_image_url = atmosphere_result['images'][0]['url']
+                        atmosphere_response = requests.get(atmosphere_image_url)
+                        if atmosphere_response.status_code == 200:
+                            atmosphere_path = world_path / "images" / "world-overview-atmosphere.png"
+                            with open(atmosphere_path, 'wb') as f:
+                                f.write(atmosphere_response.content)
+                            image_generation_info += "\n- Generated atmosphere image: world-overview-atmosphere.png"
+                    
+                    # 3. Generate concept detail image
+                    concept_prompt = f"Key concept visualization from {world_name}, detailed fantasy illustration"
+                    
+                    concept_payload = {
+                        "prompt": concept_prompt,
+                        "aspect_ratio": "1:1",
+                        "num_images": 1
+                    }
+                    
+                    concept_response = requests.post(
+                        "https://fal.run/fal-ai/imagen4/preview",
+                        headers=headers,
+                        json=concept_payload
+                    )
+                    
+                    concept_result = concept_response.json() if concept_response.status_code == 200 else None
+                    
+                    if concept_result and 'images' in concept_result and concept_result['images']:
+                        concept_image_url = concept_result['images'][0]['url']
+                        concept_response = requests.get(concept_image_url)
+                        if concept_response.status_code == 200:
+                            concept_path = world_path / "images" / "world-overview-concept.png"
+                            with open(concept_path, 'wb') as f:
+                                f.write(concept_response.content)
+                            image_generation_info += "\n- Generated concept image: world-overview-concept.png"
+                    
+                except Exception as e:
+                    image_generation_info = f"\n\nNote: Image generation attempted but failed: {str(e)}"
+            
             # Success message
             folder_list = "\n".join([f"- {folder}" for folder in sorted(created_folders)])
             if taxonomies:
@@ -950,7 +1144,7 @@ As you develop your world, you'll identify key categories that need systematic d
             
             return [types.TextContent(
                 type="text", 
-                text=f"Successfully instantiated '{world_name}' world project!\n\nProject folder: {unique_folder_name}\nFull path: {world_path}\n\nCreated structure:\n{folder_list}{taxonomy_info}\n\nNext steps:\n1. Review your world overview\n2. Create additional taxonomy folders as needed\n3. Begin creating detailed entries\n4. Generate images for key concepts"
+                text=f"Successfully instantiated '{world_name}' world project!\n\nProject folder: {unique_folder_name}\nFull path: {world_path}\n\nCreated structure:\n{folder_list}{taxonomy_info}{image_generation_info}\n\nNext steps:\n1. Review your world overview\n2. Create additional taxonomy folders as needed\n3. Begin creating detailed entries\n4. Generate images for key concepts"
             )]
             
         except Exception as e:
@@ -998,21 +1192,70 @@ As you develop your world, you'll identify key categories that need systematic d
 ## Description
 {taxonomy_desc}
 
-## Guidelines
-This taxonomy contains all {taxonomy_name.lower()} elements in the world. Each entry should:
-- Follow the world's established rules and themes
-- Reference this overview for consistency
-- Build upon the concepts described above
+## Classification Framework
+This taxonomy provides a systematic way to categorize and understand {taxonomy_name.lower()} within the world. When creating entries in this category, consider:
 
-## Related Elements
-[Connections to other taxonomies and world elements]
+- **Core characteristics** that define membership in this taxonomy
+- **Variations and subtypes** that exist within this classification
+- **Relationships** to other elements in the world
+- **Cultural or functional significance** within the broader worldbuilding context
 
----
-*Taxonomy created for {world_name}*
+## Development Guidelines
+Each {taxonomy_name.lower()} entry should explore:
+- Unique features that distinguish it from similar elements
+- Historical development or origins within the world
+- Impact on other systems, cultures, or regions
+- Potential for future development or change
+
+## Cross-References
+Consider how elements in this taxonomy connect to:
+- Other taxonomies in this world
+- The overall world themes and mechanics
+- Specific locations, cultures, or time periods
 """
                 with open(taxonomy_file, "w", encoding="utf-8") as f:
                     f.write(taxonomy_content)
                 created_folders.append(f"taxonomies/{clean_name}-overview.md")
+                
+                # Generate image for taxonomy if FAL_KEY is available
+                if FAL_AVAILABLE and os.environ.get("FAL_KEY"):
+                    try:
+                        # Create taxonomy-specific prompt
+                        taxonomy_prompt = f"Conceptual illustration of {taxonomy_name}, {taxonomy_desc}, fantasy art style, detailed digital illustration"
+                        
+                        headers = {
+                            "Authorization": f"Key {os.environ.get('FAL_KEY')}",
+                            "Content-Type": "application/json"
+                        }
+                        
+                        payload = {
+                            "prompt": taxonomy_prompt,
+                            "aspect_ratio": "1:1",
+                            "num_images": 1
+                        }
+                        
+                        response = requests.post(
+                            "https://fal.run/fal-ai/imagen4/preview",
+                            headers=headers,
+                            json=payload
+                        )
+                        
+                        if response.status_code == 200:
+                            result = response.json()
+                            if "images" in result and result["images"]:
+                                image_url = result["images"][0]["url"]
+                                image_response = requests.get(image_url)
+                                if image_response.status_code == 200:
+                                    # Save taxonomy image
+                                    images_dir = world_path / "images"
+                                    images_dir.mkdir(exist_ok=True)
+                                    taxonomy_image_path = images_dir / f"{clean_name}-taxonomy.png"
+                                    with open(taxonomy_image_path, "wb") as f:
+                                        f.write(image_response.content)
+                                    created_folders.append(f"images/{clean_name}-taxonomy.png")
+                    except Exception:
+                        # Silently continue if image generation fails
+                        pass
             
             # Create corresponding entry folders
             entries_path = world_path / "entries"
@@ -1057,7 +1300,7 @@ This taxonomy contains all {taxonomy_name.lower()} elements in the world. Each e
             clean_entry = entry_name.lower().replace(" ", "-").replace("_", "-")
             
             # Check if taxonomy exists and read its overview
-            taxonomy_overview_path = world_path / "taxonomies" / clean_taxonomy / f"{clean_taxonomy}-overview.md"
+            taxonomy_overview_path = world_path / "taxonomies" / f"{clean_taxonomy}-overview.md"
             taxonomy_context = ""
             
             if taxonomy_overview_path.exists():
@@ -1104,16 +1347,293 @@ This taxonomy contains all {taxonomy_name.lower()} elements in the world. Each e
             with open(entry_file, "w", encoding="utf-8") as f:
                 f.write(final_content)
             
+            # Generate image for entry if FAL_KEY is available
+            image_info = ""
+            if FAL_AVAILABLE and os.environ.get("FAL_KEY"):
+                try:
+                    # Extract key visual elements from the entry content to create a good prompt
+                    lines = entry_content.split('\n')
+                    title = entry_name
+                    description_lines = []
+                    
+                    for line in lines:
+                        if line.startswith('# '):
+                            title = line[2:].strip()
+                        elif line.strip() and not line.startswith('#') and not line.startswith('---'):
+                            description_lines.append(line.strip())
+                            if len(description_lines) >= 3:  # Limit description length
+                                break
+                    
+                    description = ' '.join(description_lines)
+                    
+                    # Create entry-specific prompt with taxonomy context
+                    if taxonomy_context:
+                        entry_prompt = f"Detailed illustration of {title}, {description}, within the context of {taxonomy_context[:100]}, fantasy art style, detailed digital art"
+                    else:
+                        entry_prompt = f"Detailed illustration of {title}, {description}, {taxonomy} themed, fantasy art style, detailed digital art"
+                    
+                    headers = {
+                        "Authorization": f"Key {os.environ.get('FAL_KEY')}",
+                        "Content-Type": "application/json"
+                    }
+                    
+                    payload = {
+                        "prompt": entry_prompt,
+                        "aspect_ratio": "1:1", 
+                        "num_images": 1
+                    }
+                    
+                    response = requests.post(
+                        "https://fal.run/fal-ai/imagen4/preview",
+                        headers=headers,
+                        json=payload
+                    )
+                    
+                    if response.status_code == 200:
+                        result = response.json()
+                        if "images" in result and result["images"]:
+                            image_url = result["images"][0]["url"]
+                            image_response = requests.get(image_url)
+                            if image_response.status_code == 200:
+                                # Save entry image in organized structure
+                                images_dir = world_path / "images"
+                                images_dir.mkdir(exist_ok=True)
+                                
+                                # Create category subfolder for organization
+                                category_dir = images_dir / clean_taxonomy
+                                category_dir.mkdir(exist_ok=True)
+                                
+                                entry_image_path = category_dir / f"{clean_entry}.png"
+                                with open(entry_image_path, "wb") as f:
+                                    f.write(image_response.content)
+                                
+                                image_info = f"\n4. Generated image: images/{clean_taxonomy}/{clean_entry}.png"
+                except Exception:
+                    # Silently continue if image generation fails
+                    pass
+            
             relative_path = str(entry_file.relative_to(world_path))
             context_info = f"\n\nTaxonomy context included: {taxonomy_context[:100]}..." if taxonomy_context else "\n\nNo taxonomy overview found for reference."
             
             return [types.TextContent(
                 type="text",
-                text=f"Successfully created entry '{entry_name}' in {taxonomy} taxonomy!\n\nSaved to: {relative_path}{context_info}\n\nThe entry includes:\n1. Automatic reference to the taxonomy overview\n2. Your detailed content\n3. Taxonomy classification footer"
+                text=f"Successfully created entry '{entry_name}' in {taxonomy} taxonomy!\n\nSaved to: {relative_path}{context_info}\n\nThe entry includes:\n1. Automatic reference to the taxonomy overview\n2. Your detailed content\n3. Taxonomy classification footer{image_info}"
             )]
             
         except Exception as e:
             return [types.TextContent(type="text", text=f"Error creating world entry: {str(e)}")]
+    
+    elif name == "build_static_site":
+        if not arguments:
+            return [types.TextContent(type="text", text="Error: world_directory is required")]
+        
+        world_directory = arguments.get("world_directory", "")
+        action = arguments.get("action", "build")
+        site_dir = arguments.get("site_dir", "site")
+        
+        if not world_directory:
+            return [types.TextContent(type="text", text="Error: world_directory is required")]
+        
+        try:
+            import subprocess
+            import sys
+            import shutil
+            
+            # Validate world directory exists
+            world_path = Path(world_directory)
+            if not world_path.exists():
+                return [types.TextContent(type="text", text=f"Error: World directory {world_directory} does not exist")]
+            
+            # Check if it's a valid world directory (has overview folder)
+            overview_path = world_path / "overview"
+            if not overview_path.exists():
+                return [types.TextContent(type="text", text=f"Error: {world_directory} is not a valid world directory (no overview folder found)")]
+            
+            # Get the directory where this script is located (should be the project root)
+            script_dir = Path(__file__).parent.absolute()
+            
+            # Check if we're in the right directory (should have astro.config.mjs)
+            astro_config_path = script_dir / "astro.config.mjs"
+            if not astro_config_path.exists():
+                return [types.TextContent(type="text", text=f"Error: astro.config.mjs not found in {script_dir}. Make sure Astro is configured in the project directory.")]
+            
+            # Check if node_modules exists
+            node_modules_path = script_dir / "node_modules"
+            if not node_modules_path.exists():
+                return [types.TextContent(type="text", text=f"Error: node_modules not found in {script_dir}. Run 'npm install' first.")]
+            
+            if action == "build":
+                # Create a temporary symlink of the world in the project directory so Astro can find it
+                world_name = world_path.name
+                temp_world_link = script_dir / world_name
+                
+                # Remove existing symlink if it exists
+                if temp_world_link.exists() or temp_world_link.is_symlink():
+                    if temp_world_link.is_symlink():
+                        temp_world_link.unlink()
+                    else:
+                        shutil.rmtree(temp_world_link)
+                
+                # Create symlink to the world directory
+                temp_world_link.symlink_to(world_path.absolute())
+                
+                # Clean up old content symlinks and create new ones
+                content_dir = script_dir / "src" / "content"
+                content_dir.mkdir(parents=True, exist_ok=True)
+                
+                # Create symlinks for the content directories
+                content_links = ["overview", "taxonomies", "entries"]
+                for link_name in content_links:
+                    link_path = content_dir / link_name
+                    source_path = world_path / link_name
+                    
+                    # Remove existing symlink if it exists
+                    if link_path.exists() or link_path.is_symlink():
+                        if link_path.is_symlink():
+                            link_path.unlink()
+                        else:
+                            shutil.rmtree(link_path)
+                    
+                    # Create symlink if source exists
+                    if source_path.exists():
+                        link_path.symlink_to(source_path.absolute())
+                
+                # Copy images to public directory for the build
+                world_images_path = world_path / "images"
+                public_images_path = script_dir / "public" / "images" / world_name
+                
+                if world_images_path.exists():
+                    # Remove existing public images for this world
+                    if public_images_path.exists():
+                        shutil.rmtree(public_images_path)
+                    
+                    # Copy images to public directory
+                    shutil.copytree(world_images_path, public_images_path)
+                
+                try:
+                    # Build the static site
+                    result = subprocess.run(
+                        ["npm", "run", "build"],
+                        capture_output=True,
+                        text=True,
+                        timeout=300,  # 5 minutes timeout
+                        cwd=script_dir  # Run from the project directory
+                    )
+                    
+                    if result.returncode == 0:
+                        # Move the built site from dist to the world's site directory
+                        source_dist = script_dir / "dist"
+                        target_site = world_path / site_dir
+                        
+                        # Remove existing site directory if it exists
+                        if target_site.exists():
+                            shutil.rmtree(target_site)
+                        
+                        # Move the built site
+                        if source_dist.exists():
+                            shutil.move(str(source_dist), str(target_site))
+                            
+                            # Count generated files
+                            html_files = list(target_site.rglob("*.html"))
+                            asset_files = list(target_site.rglob("*.css")) + list(target_site.rglob("*.js"))
+                            
+                            return [types.TextContent(
+                                type="text",
+                                text=f"✅ Static site built successfully for {world_name}!\n\nSite location: {target_site.absolute()}\nGenerated {len(html_files)} HTML pages and {len(asset_files)} asset files.\n\nTo serve the site locally:\n- Navigate to {target_site}\n- Run 'python -m http.server 8000' or any static file server\n- Open http://localhost:8000"
+                            )]
+                        else:
+                            return [types.TextContent(
+                                type="text",
+                                text=f"Build completed but dist directory not found.\n\nBuild output:\n{result.stdout}\n\nErrors:\n{result.stderr}"
+                            )]
+                    else:
+                        return [types.TextContent(
+                            type="text",
+                            text=f"Build failed with exit code {result.returncode}\n\nErrors:\n{result.stderr}\n\nOutput:\n{result.stdout}"
+                        )]
+                finally:
+                    # Clean up the temporary symlink
+                    if temp_world_link.exists() or temp_world_link.is_symlink():
+                        temp_world_link.unlink()
+                    
+                    # Clean up public images
+                    public_images_path = script_dir / "public" / "images" / world_name
+                    if public_images_path.exists():
+                        shutil.rmtree(public_images_path)
+                    
+                    # Clean up content symlinks
+                    content_dir = script_dir / "src" / "content"
+                    content_links = ["overview", "taxonomies", "entries"]
+                    for link_name in content_links:
+                        link_path = content_dir / link_name
+                        if link_path.exists() or link_path.is_symlink():
+                            if link_path.is_symlink():
+                                link_path.unlink()
+                            else:
+                                shutil.rmtree(link_path)
+            
+            elif action == "dev":
+                # Create temporary symlink for development
+                world_name = world_path.name
+                temp_world_link = script_dir / world_name
+                
+                if temp_world_link.exists() or temp_world_link.is_symlink():
+                    if temp_world_link.is_symlink():
+                        temp_world_link.unlink()
+                    else:
+                        shutil.rmtree(temp_world_link)
+                
+                temp_world_link.symlink_to(world_path.absolute())
+                
+                # Create content symlinks that Astro expects
+                content_dir = script_dir / "src" / "content"
+                content_dir.mkdir(parents=True, exist_ok=True)
+                
+                # Create symlinks for the content directories
+                content_links = ["overview", "taxonomies", "entries"]
+                for link_name in content_links:
+                    link_path = content_dir / link_name
+                    source_path = world_path / link_name
+                    
+                    # Remove existing symlink if it exists
+                    if link_path.exists() or link_path.is_symlink():
+                        if link_path.is_symlink():
+                            link_path.unlink()
+                        else:
+                            shutil.rmtree(link_path)
+                    
+                    # Create symlink if source exists
+                    if source_path.exists():
+                        link_path.symlink_to(source_path.absolute())
+                
+                return [types.TextContent(
+                    type="text",
+                    text=f"✅ Development setup ready for {world_name}!\n\nTo start the development server:\n1. Open a terminal in {script_dir}\n2. Run: npm run dev\n3. Open http://localhost:4321\n\nNote: The world has been temporarily linked for development. The symlink will be cleaned up when you build the site."
+                )]
+            
+            elif action == "preview":
+                # Check if site directory exists in the world
+                site_path = world_path / site_dir
+                if not site_path.exists():
+                    return [types.TextContent(
+                        type="text",
+                        text=f"No built site found in {site_path}. Run the build action first."
+                    )]
+                
+                return [types.TextContent(
+                    type="text",
+                    text=f"To preview the built site for {world_path.name}:\n\n1. Navigate to: {site_path}\n2. Run: python -m http.server 8000\n3. Open: http://localhost:8000\n\nOr use any other static file server of your choice."
+                )]
+            
+            else:
+                return [types.TextContent(type="text", text=f"Unknown action: {action}. Use 'build', 'dev', or 'preview'.")]
+                
+        except subprocess.TimeoutExpired:
+            return [types.TextContent(type="text", text="Build timed out after 5 minutes. Your project might be too large or there may be an issue with the build process.")]
+        except FileNotFoundError:
+            return [types.TextContent(type="text", text="Error: npm not found. Make sure Node.js and npm are installed on your system.")]
+        except Exception as e:
+            return [types.TextContent(type="text", text=f"Error building static site: {str(e)}")]
     
     else:
         return [types.TextContent(type="text", text=f"Unknown tool: {name}")]
