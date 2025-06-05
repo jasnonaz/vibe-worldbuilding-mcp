@@ -98,3 +98,6 @@ temp/
 # Astro
 dist/
 .astro/
+
+# Generated sites (optional - comment out if you want to commit example sites)
+# example-worlds/*/site/
