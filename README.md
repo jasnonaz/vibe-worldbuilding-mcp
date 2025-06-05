@@ -11,6 +11,7 @@ This MCP helps you build rich, cohesive fictional worlds through a structured ap
 - **Structured Worldbuilding Prompts**: Guided workflows for developing different aspects of your world
 - **Content Management**: Save, read, and organize your worldbuilding content in markdown files  
 - **Image Generation**: Create visual representations of your world elements using Google Imagen
+- **Static Site Generation**: Build beautiful websites from your worldbuilding content using Astro
 - **Consistency Tools**: Review and maintain coherence across your world's elements
 - **Flexible Workflow**: Support for both new projects and continuing existing work
 
@@ -107,6 +108,7 @@ The MCP provides several prompts to guide your worldbuilding process:
 - **create_taxonomy_folders** - Add new taxonomy categories with descriptions to an existing world project
 - **create_world_entry** - Create entries within taxonomies that automatically reference the taxonomy overview
 - **generate_image_from_markdown_file** - Generate images from your content (requires API key)
+- **build_static_site** - Generate a static website from your worldbuilding content
 
 ## Image Generation
 
@@ -123,6 +125,28 @@ The MCP can generate images for your world elements using FAL's Imagen4 API. Aft
    - **Aspect ratio**: Choose from 1:1, 16:9, 9:16, 3:4, or 4:3
 
 You can then upload the generated image to Claude to view it in your conversation.
+
+## Static Site Generation
+
+The MCP can generate beautiful static websites from your worldbuilding content using Astro. This creates a navigable website that showcases your world with:
+
+- **Homepage** with world overview and navigation
+- **Taxonomy pages** with lists of all entries in each category
+- **Entry pages** with full content and images
+- **Responsive design** that works on all devices
+- **Fast performance** with optimized static files
+
+### Using Static Site Generation
+
+1. **Build your world** using the standard worldbuilding tools
+2. **Generate images** for visual content (optional but recommended)
+3. **Use the `build_static_site` tool** with your world directory path
+4. **View your website** by serving the generated `site/` folder:
+   ```bash
+   cd your-world-directory/site
+   python3 -m http.server 8080
+   ```
+   Then open http://localhost:8080 in your browser
 
 ## Recommended Workflow
 
