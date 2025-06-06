@@ -649,6 +649,60 @@ async def handle_list_tools() -> list[types.Tool]:
                 },
                 "required": ["world_directory"]
             }
+        ),
+        types.Tool(
+            name="identify_stub_candidates",
+            description="Analyze entry content and present it to client LLM for stub candidate identification",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "world_directory": {
+                        "type": "string",
+                        "description": "Path to the world directory"
+                    },
+                    "entry_content": {
+                        "type": "string",
+                        "description": "The markdown content of the entry to analyze for stub candidates"
+                    },
+                    "entry_name": {
+                        "type": "string",
+                        "description": "Name of the entry being analyzed"
+                    },
+                    "taxonomy": {
+                        "type": "string",
+                        "description": "Taxonomy the entry belongs to"
+                    }
+                },
+                "required": ["world_directory", "entry_content", "entry_name", "taxonomy"]
+            }
+        ),
+        types.Tool(
+            name="create_stub_entries",
+            description="Create multiple stub entries based on LLM analysis",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "world_directory": {
+                        "type": "string",
+                        "description": "Path to the world directory"
+                    },
+                    "stub_entries": {
+                        "type": "array",
+                        "description": "List of stub entries to create",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "name": {"type": "string", "description": "Name of the entity"},
+                                "taxonomy": {"type": "string", "description": "Taxonomy to place the entry in"},
+                                "description": {"type": "string", "description": "1-2 sentence description"},
+                                "create_taxonomy": {"type": "boolean", "description": "Whether to create the taxonomy if it doesn't exist", "default": False}
+                            },
+                            "required": ["name", "taxonomy", "description"]
+                        }
+                    }
+                },
+                "required": ["world_directory", "stub_entries"]
+            }
         )
     ]
     
@@ -1360,9 +1414,85 @@ taxonomyContext: "{taxonomy_context}"
             relative_path = str(entry_file.relative_to(world_path))
             context_info = f"\n\nTaxonomy context included: {taxonomy_context[:100]}..." if taxonomy_context else "\n\nNo taxonomy overview found for reference."
             
+            # Auto-stub generation workflow
+            stub_analysis_info = ""
+            try:
+                # Generate the analysis prompt using the identify_stub_candidates logic
+                taxonomies_path = world_path / "taxonomies"
+                existing_taxonomies = []
+                
+                if taxonomies_path.exists():
+                    for taxonomy_file in taxonomies_path.glob("*-overview.md"):
+                        taxonomy_name = taxonomy_file.stem.replace("-overview", "").replace("-", " ").title()
+                        existing_taxonomies.append(taxonomy_name)
+                
+                # Get list of existing entries across all taxonomies for comparison
+                entries_path = world_path / "entries"
+                existing_entries = []
+                
+                if entries_path.exists():
+                    for taxonomy_dir in entries_path.iterdir():
+                        if taxonomy_dir.is_dir():
+                            for entry_file in taxonomy_dir.glob("*.md"):
+                                entry_stem = entry_file.stem.replace("-", " ").title()
+                                existing_entries.append({
+                                    "name": entry_stem,
+                                    "taxonomy": taxonomy_dir.name.replace("-", " ").title(),
+                                    "filename": entry_file.stem
+                                })
+                
+                # Create the analysis prompt for the client LLM
+                taxonomies_list = "\n".join([f"- {tax}" for tax in existing_taxonomies]) if existing_taxonomies else "- No existing taxonomies found"
+                entries_list = "\n".join([f"- {entry['name']} ({entry['taxonomy']})" for entry in existing_entries]) if existing_entries else "- No existing entries found"
+                
+                stub_analysis_prompt = f"""# Auto-Stub Generation Analysis
+
+The entry '{entry_name}' has been successfully created. Now analyzing for potential stub candidates...
+
+## Entry Created
+**Name**: {entry_name}
+**Taxonomy**: {taxonomy}
+
+**Content**:
+{entry_content}
+
+## Available Taxonomies
+{taxonomies_list}
+
+## Existing Entries (Don't create stubs for these)
+{entries_list}
+
+## Analysis Request
+Please identify entities mentioned in this entry that should become new stub entries. For each candidate, provide:
+
+1. **Entity Name**: The name of the entity
+2. **Suggested Taxonomy**: Which taxonomy it should belong to (prefer existing taxonomies)
+3. **Brief Description**: 1-2 sentences describing what this entity is
+4. **Create New Taxonomy**: If suggesting a new taxonomy, set this to true
+
+## Guidelines
+- Only suggest entities substantial enough to warrant their own page
+- Avoid minor details or passing references
+- Focus on proper nouns, significant places, important people, unique items, etc.
+- Don't suggest entities that already exist
+
+If you identify stub candidates, use the `create_stub_entries` tool with this format:
+```
+[{{"name": "Entity Name", "taxonomy": "Suggested Taxonomy", "description": "Brief description", "create_taxonomy": false}}]
+```
+
+If no stub candidates are found, simply respond with "No stub candidates identified for this entry."
+"""
+                
+                stub_analysis_info = f"\n\n## Auto-Stub Analysis\n{stub_analysis_prompt}"
+                
+            except Exception:
+                # Silently continue if auto-stub analysis fails
+                pass
+            
             return [types.TextContent(
                 type="text",
-                text=f"Successfully created entry '{entry_name}' in {taxonomy} taxonomy!\n\nSaved to: {relative_path}{context_info}\n\nThe entry includes:\n1. Automatic reference to the taxonomy overview\n2. Your detailed content\n3. Taxonomy classification footer{image_info}"
+                text=f"Successfully created entry '{entry_name}' in {taxonomy} taxonomy!\n\nSaved to: {relative_path}{context_info}\n\nThe entry includes:\n1. Automatic reference to the taxonomy overview\n2. Your detailed content\n3. Taxonomy classification footer{image_info}{stub_analysis_info}"
             )]
             
         except Exception as e:
@@ -1579,6 +1709,233 @@ taxonomyContext: "{taxonomy_context}"
             return [types.TextContent(type="text", text="Error: npm not found. Make sure Node.js and npm are installed on your system.")]
         except Exception as e:
             return [types.TextContent(type="text", text=f"Error building static site: {str(e)}")]
+    
+    elif name == "identify_stub_candidates":
+        if not arguments:
+            return [types.TextContent(type="text", text="Error: No arguments provided")]
+        
+        world_directory = arguments.get("world_directory", "")
+        entry_content = arguments.get("entry_content", "")
+        entry_name = arguments.get("entry_name", "")
+        taxonomy = arguments.get("taxonomy", "")
+        
+        if not all([world_directory, entry_content, entry_name, taxonomy]):
+            return [types.TextContent(type="text", text="Error: All parameters (world_directory, entry_content, entry_name, taxonomy) are required")]
+        
+        try:
+            world_path = Path(world_directory)
+            if not world_path.exists():
+                return [types.TextContent(type="text", text=f"Error: World directory {world_directory} does not exist")]
+            
+            # Get list of existing taxonomies
+            taxonomies_path = world_path / "taxonomies"
+            existing_taxonomies = []
+            
+            if taxonomies_path.exists():
+                for taxonomy_file in taxonomies_path.glob("*-overview.md"):
+                    taxonomy_name = taxonomy_file.stem.replace("-overview", "").replace("-", " ").title()
+                    existing_taxonomies.append(taxonomy_name)
+            
+            # Get list of existing entries across all taxonomies for comparison
+            entries_path = world_path / "entries"
+            existing_entries = []
+            
+            if entries_path.exists():
+                for taxonomy_dir in entries_path.iterdir():
+                    if taxonomy_dir.is_dir():
+                        for entry_file in taxonomy_dir.glob("*.md"):
+                            entry_stem = entry_file.stem.replace("-", " ").title()
+                            existing_entries.append({
+                                "name": entry_stem,
+                                "taxonomy": taxonomy_dir.name.replace("-", " ").title(),
+                                "filename": entry_file.stem
+                            })
+            
+            # Create the analysis prompt for the client LLM
+            taxonomies_list = "\n".join([f"- {tax}" for tax in existing_taxonomies]) if existing_taxonomies else "- No existing taxonomies found"
+            entries_list = "\n".join([f"- {entry['name']} ({entry['taxonomy']})" for entry in existing_entries]) if existing_entries else "- No existing entries found"
+            
+            analysis_prompt = f"""# Stub Candidate Analysis
+
+## Task
+Analyze the following worldbuilding entry and identify entities that should become new stub entries in this world.
+
+## Entry Being Analyzed
+**Name**: {entry_name}
+**Taxonomy**: {taxonomy}
+
+**Content**:
+{entry_content}
+
+## Available Taxonomies
+{taxonomies_list}
+
+## Existing Entries (Don't create stubs for these)
+{entries_list}
+
+## Your Task
+Please identify entities mentioned in this entry that should become new stub entries. For each candidate, specify:
+
+1. **Entity Name**: The name of the entity
+2. **Suggested Taxonomy**: Which taxonomy it should belong to (choose from existing taxonomies above, or suggest a new one)
+3. **Brief Description**: 1-2 sentences describing what this entity is
+4. **Why It Needs a Stub**: Brief explanation of why this deserves its own entry
+
+## Guidelines
+- Only suggest entities that are substantial enough to warrant their own page
+- Avoid creating stubs for minor details or passing references
+- Consider whether each entity could have meaningful content developed about it
+- Don't suggest entities that already exist in the world
+- Focus on proper nouns, significant places, important people, unique items, etc.
+- Prefer existing taxonomies, but suggest new ones if needed
+
+## Response Format
+For each stub candidate, use this format:
+
+**Entity Name**: [Name]
+**Taxonomy**: [Suggested taxonomy]
+**Description**: [1-2 sentence description]
+**Justification**: [Why this needs a stub]
+
+If no stub candidates are found, simply respond with "No stub candidates identified."
+
+## Analysis
+Please analyze the content above and identify stub candidates:"""
+
+            return [types.TextContent(type="text", text=analysis_prompt)]
+            
+        except Exception as e:
+            return [types.TextContent(type="text", text=f"Error analyzing entry for stub candidates: {str(e)}")]
+    
+    elif name == "create_stub_entries":
+        if not arguments:
+            return [types.TextContent(type="text", text="Error: No arguments provided")]
+        
+        world_directory = arguments.get("world_directory", "")
+        stub_entries = arguments.get("stub_entries", [])
+        
+        if not world_directory or not stub_entries:
+            return [types.TextContent(type="text", text="Error: world_directory and stub_entries are required")]
+        
+        try:
+            world_path = Path(world_directory)
+            if not world_path.exists():
+                return [types.TextContent(type="text", text=f"Error: World directory {world_directory} does not exist")]
+            
+            created_stubs = []
+            created_taxonomies = []
+            
+            for stub in stub_entries:
+                name = stub.get("name", "")
+                taxonomy = stub.get("taxonomy", "")
+                description = stub.get("description", "")
+                create_taxonomy = stub.get("create_taxonomy", False)
+                
+                if not all([name, taxonomy, description]):
+                    continue  # Skip invalid entries
+                
+                # Clean names
+                clean_taxonomy = taxonomy.lower().replace(" ", "-").replace("_", "-")
+                clean_name = name.lower().replace(" ", "-").replace("_", "-")
+                
+                # Check if taxonomy exists, create if needed
+                taxonomy_overview_path = world_path / "taxonomies" / f"{clean_taxonomy}-overview.md"
+                if not taxonomy_overview_path.exists() and create_taxonomy:
+                    # Create basic taxonomy
+                    taxonomies_path = world_path / "taxonomies"
+                    taxonomies_path.mkdir(exist_ok=True)
+                    
+                    basic_taxonomy_content = f"""# {taxonomy.title()} - Taxonomy Overview
+
+## Description
+{taxonomy.title()} entries in this world.
+
+## Entry Structure for {taxonomy.title()}
+Each {taxonomy.lower()} entry should include:
+
+### Required Sections
+- **Overview** - Brief description and significance
+- **Description** - Detailed explanation of key aspects
+- **Relationships** - Connections to other world elements
+
+### Optional Sections
+- **History** - Background and development
+- **Impact** - Effects on the broader world
+
+## Writing Guidelines
+- **Length**: 200-500 words for full entries, 1-2 sentences for stubs
+- **Focus**: Emphasize unique characteristics and world connections
+- **Relationships**: Connect to other taxonomies where relevant
+
+## Tone and Style
+Descriptive and immersive, maintaining consistency with the world's established tone.
+"""
+                    
+                    with open(taxonomy_overview_path, "w", encoding="utf-8") as f:
+                        f.write(basic_taxonomy_content)
+                    
+                    # Create entries folder for taxonomy
+                    entries_path = world_path / "entries"
+                    entries_path.mkdir(exist_ok=True)
+                    taxonomy_entries_path = entries_path / clean_taxonomy
+                    taxonomy_entries_path.mkdir(exist_ok=True)
+                    
+                    created_taxonomies.append(taxonomy)
+                
+                elif not taxonomy_overview_path.exists():
+                    # Skip if taxonomy doesn't exist and we're not supposed to create it
+                    continue
+                
+                # Create the stub entry
+                entry_path = world_path / "entries" / clean_taxonomy
+                entry_path.mkdir(parents=True, exist_ok=True)
+                
+                entry_file = entry_path / f"{clean_name}.md"
+                
+                # Check if entry already exists
+                if entry_file.exists():
+                    continue  # Skip existing entries
+                
+                # Create stub content
+                stub_content = f"""# {name}
+
+{description}
+
+---
+*This is a stub entry. This {taxonomy.lower()} deserves more detailed development.*
+
+---
+*Entry in {taxonomy.title()} taxonomy*
+"""
+                
+                with open(entry_file, "w", encoding="utf-8") as f:
+                    f.write(stub_content)
+                
+                created_stubs.append({
+                    "name": name,
+                    "taxonomy": taxonomy,
+                    "file": f"entries/{clean_taxonomy}/{clean_name}.md"
+                })
+            
+            # Generate summary
+            summary_parts = []
+            if created_stubs:
+                summary_parts.append(f"Created {len(created_stubs)} stub entries:")
+                for stub in created_stubs:
+                    summary_parts.append(f"- {stub['name']} ({stub['taxonomy']})")
+            
+            if created_taxonomies:
+                summary_parts.append(f"\nCreated {len(created_taxonomies)} new taxonomies:")
+                for tax in created_taxonomies:
+                    summary_parts.append(f"- {tax}")
+            
+            if not summary_parts:
+                summary_parts.append("No stub entries were created (all may already exist or have invalid data)")
+            
+            return [types.TextContent(type="text", text="\n".join(summary_parts))]
+            
+        except Exception as e:
+            return [types.TextContent(type="text", text=f"Error creating stub entries: {str(e)}")]
     
     else:
         return [types.TextContent(type="text", text=f"Unknown tool: {name}")]
