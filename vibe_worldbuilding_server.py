@@ -1136,8 +1136,11 @@ Provide the complete formatted guidelines - I'll use them exactly as you write t
         taxonomy_description = arguments.get("taxonomy_description", "")
         custom_guidelines = arguments.get("custom_guidelines", "")
         
-        if not world_directory or not taxonomy_name or not taxonomy_description or not custom_guidelines:
-            return [types.TextContent(type="text", text="Error: world_directory, taxonomy_name, taxonomy_description, and custom_guidelines are all required")]
+        if not world_directory or not taxonomy_name or not taxonomy_description:
+            return [types.TextContent(type="text", text="Error: world_directory, taxonomy_name, and taxonomy_description are required")]
+        
+        if not custom_guidelines:
+            return [types.TextContent(type="text", text="Error: custom_guidelines is required. Please run 'generate_taxonomy_guidelines' first to create guidelines for this taxonomy, then use those guidelines here.")]
         
         try:
             world_path = Path(world_directory)
@@ -1275,7 +1278,7 @@ Provide the complete formatted guidelines - I'll use them exactly as you write t
             header = ""
             if taxonomy_context:
                 header = f"""---
-**Taxonomy Context**: {taxonomy_context}
+taxonomyContext: "{taxonomy_context}"
 ---
 
 """
