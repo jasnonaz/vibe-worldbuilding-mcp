@@ -556,8 +556,26 @@ async def handle_list_tools() -> list[types.Tool]:
             }
         ),
         types.Tool(
+            name="generate_taxonomy_guidelines",
+            description="Generate structured entry guidelines for a specific taxonomy type",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "taxonomy_name": {
+                        "type": "string",
+                        "description": "Name of the taxonomy to create guidelines for"
+                    },
+                    "taxonomy_description": {
+                        "type": "string",
+                        "description": "Description of how this taxonomy applies to the world"
+                    }
+                },
+                "required": ["taxonomy_name", "taxonomy_description"]
+            }
+        ),
+        types.Tool(
             name="create_taxonomy_folders",
-            description="Create folders for specific taxonomies as they are developed during worldbuilding",
+            description="Create a single taxonomy with custom guidelines for a world project",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -565,20 +583,20 @@ async def handle_list_tools() -> list[types.Tool]:
                         "type": "string",
                         "description": "Path to the world directory"
                     },
-                    "taxonomies": {
-                        "type": "array",
-                        "description": "List of taxonomy objects with name and description",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "name": {"type": "string", "description": "Name of the taxonomy"},
-                                "description": {"type": "string", "description": "Description of how this taxonomy applies to the world"}
-                            },
-                            "required": ["name", "description"]
-                        }
+                    "taxonomy_name": {
+                        "type": "string",
+                        "description": "Name of the taxonomy to create"
+                    },
+                    "taxonomy_description": {
+                        "type": "string",
+                        "description": "Description of how this taxonomy applies to the world"
+                    },
+                    "custom_guidelines": {
+                        "type": "string",
+                        "description": "Custom entry structure guidelines for this taxonomy"
                     }
                 },
-                "required": ["world_directory", "taxonomies"]
+                "required": ["world_directory", "taxonomy_name", "taxonomy_description", "custom_guidelines"]
             }
         ),
         types.Tool(
@@ -898,90 +916,11 @@ async def handle_call_tool(name: str, arguments: dict[str, Any] | None) -> list[
                 folder_path.mkdir(exist_ok=True)
                 created_folders.append(str(folder_path.relative_to(base_path)))
             
-            # Create taxonomy files if provided (no subfolders)
-            if taxonomies:
-                taxonomies_path = world_path / "taxonomies"
-                entries_path = world_path / "entries"
-                
-                for taxonomy in taxonomies:
-                    taxonomy_name = taxonomy.get("name", "") if isinstance(taxonomy, dict) else taxonomy
-                    taxonomy_desc = taxonomy.get("description", "") if isinstance(taxonomy, dict) else ""
-                    clean_name = taxonomy_name.lower().replace(" ", "-").replace("_", "-")
-                    
-                    # Create taxonomy overview file directly in taxonomies folder
-                    taxonomy_file = taxonomies_path / f"{clean_name}-overview.md"
-                    taxonomy_content = f"""# {taxonomy_name.title()} - Taxonomy Overview
-
-## Description
-{taxonomy_desc}
-
-## Classification Framework
-This taxonomy provides a systematic way to categorize and understand {taxonomy_name.lower()} within the world. When creating entries in this category, consider:
-
-- **Core characteristics** that define membership in this taxonomy
-- **Variations and subtypes** that exist within this classification
-- **Relationships** to other elements in the world
-- **Cultural or functional significance** within the broader worldbuilding context
-
-## Development Guidelines
-Each {taxonomy_name.lower()} entry should explore:
-- Unique features that distinguish it from similar elements
-- Historical development or origins within the world
-- Impact on other systems, cultures, or regions
-- Potential for future development or change
-
-## Cross-References
-Consider how elements in this taxonomy connect to:
-- Other taxonomies in this world
-- The overall world themes and mechanics
-- Specific locations, cultures, or time periods
-"""
-                    with open(taxonomy_file, "w", encoding="utf-8") as f:
-                        f.write(taxonomy_content)
-                    created_folders.append(str(taxonomy_file.relative_to(base_path)))
-                    
-                    # Generate image for taxonomy if FAL_KEY is available
-                    if FAL_AVAILABLE and os.environ.get("FAL_KEY"):
-                        try:
-                            # Create taxonomy-specific prompt
-                            taxonomy_prompt = f"Conceptual illustration of {taxonomy_name}, {taxonomy_desc}, fantasy art style, detailed digital illustration"
-                            
-                            headers = {
-                                "Authorization": f"Key {os.environ.get('FAL_KEY')}",
-                                "Content-Type": "application/json"
-                            }
-                            
-                            payload = {
-                                "prompt": taxonomy_prompt,
-                                "aspect_ratio": "1:1",
-                                "num_images": 1
-                            }
-                            
-                            response = requests.post(
-                                "https://fal.run/fal-ai/imagen4/preview",
-                                headers=headers,
-                                json=payload
-                            )
-                            
-                            if response.status_code == 200:
-                                result = response.json()
-                                if "images" in result and result["images"]:
-                                    image_url = result["images"][0]["url"]
-                                    image_response = requests.get(image_url)
-                                    if image_response.status_code == 200:
-                                        # Save taxonomy image
-                                        taxonomy_image_path = world_path / "images" / f"{clean_name}-taxonomy.png"
-                                        with open(taxonomy_image_path, "wb") as f:
-                                            f.write(image_response.content)
-                                        created_folders.append(str(taxonomy_image_path.relative_to(base_path)))
-                        except Exception:
-                            # Silently continue if image generation fails
-                            pass
-                    
-                    # Create corresponding entry folder
-                    entry_path = entries_path / clean_name
-                    entry_path.mkdir(exist_ok=True)
-                    created_folders.append(str(entry_path.relative_to(base_path)))
+            # Create basic folder structure only - no taxonomy files
+            taxonomies_path = world_path / "taxonomies"
+            taxonomies_path.mkdir(exist_ok=True)
+            entries_path = world_path / "entries"
+            entries_path.mkdir(exist_ok=True)
             
             # Save the world overview content
             overview_file = world_path / "overview" / "world-overview.md"
@@ -1150,29 +1089,60 @@ As you develop your world, you'll identify key categories that need systematic d
         except Exception as e:
             return [types.TextContent(type="text", text=f"Error creating world structure: {str(e)}")]
     
+    elif name == "generate_taxonomy_guidelines":
+        if not arguments:
+            return [types.TextContent(type="text", text="Error: No arguments provided")]
+        
+        taxonomy_name = arguments.get("taxonomy_name", "")
+        taxonomy_description = arguments.get("taxonomy_description", "")
+        
+        if not taxonomy_name or not taxonomy_description:
+            return [types.TextContent(type="text", text="Error: taxonomy_name and taxonomy_description are required")]
+        
+        guidelines_prompt = f"""Please generate structured entry guidelines for a taxonomy called "{taxonomy_name}" with this description: {taxonomy_description}
+
+Create specific entry structure guidelines. Generate the complete guidelines including:
+
+## Entry Structure for {taxonomy_name.title()}
+Each {taxonomy_name.lower()} entry should include:
+
+### Required Sections
+[List exactly 3-5 core sections that every entry should have - be very specific to this taxonomy type]
+
+### Optional Sections (choose 2-3 most relevant)
+[List 2-3 additional sections that might be relevant for some entries]
+
+## Writing Guidelines
+- **Length**: [Specify appropriate word count for this taxonomy type]
+- **Complexity Control**: [How many references to make, what to avoid]
+- **Focus**: [What should entries emphasize for this specific taxonomy]
+- **Relationships**: [How entries should connect to others]
+
+## Tone and Style
+[Describe the appropriate writing tone and style for this taxonomy type]
+
+Make everything specific to this taxonomy concept. The guidelines you create will be used directly to create individual entries, so be detailed and practical.
+
+Provide the complete formatted guidelines - I'll use them exactly as you write them."""
+
+        return [types.TextContent(type="text", text=guidelines_prompt)]
+    
     elif name == "create_taxonomy_folders":
         if not arguments:
             return [types.TextContent(type="text", text="Error: No arguments provided")]
         
         world_directory = arguments.get("world_directory", "")
-        taxonomies = arguments.get("taxonomies", [])
+        taxonomy_name = arguments.get("taxonomy_name", "")
+        taxonomy_description = arguments.get("taxonomy_description", "")
+        custom_guidelines = arguments.get("custom_guidelines", "")
         
-        if not world_directory or not taxonomies:
-            return [types.TextContent(type="text", text="Error: Both world_directory and taxonomies are required")]
+        if not world_directory or not taxonomy_name or not taxonomy_description or not custom_guidelines:
+            return [types.TextContent(type="text", text="Error: world_directory, taxonomy_name, taxonomy_description, and custom_guidelines are all required")]
         
         try:
             world_path = Path(world_directory)
             if not world_path.exists():
                 return [types.TextContent(type="text", text=f"Error: World directory {world_directory} does not exist")]
-            
-            # Get world name from directory or README
-            world_name = world_path.name.replace("-", " ").title()
-            readme_path = world_path / "README.md"
-            if readme_path.exists():
-                with open(readme_path, "r", encoding="utf-8") as f:
-                    first_line = f.readline().strip()
-                    if first_line.startswith("# "):
-                        world_name = first_line[2:].split(" - ")[0].strip()
             
             created_folders = []
             
@@ -1180,100 +1150,72 @@ As you develop your world, you'll identify key categories that need systematic d
             taxonomies_path = world_path / "taxonomies"
             taxonomies_path.mkdir(exist_ok=True)
             
-            for taxonomy in taxonomies:
-                taxonomy_name = taxonomy.get("name", "")
-                taxonomy_desc = taxonomy.get("description", "")
-                clean_name = taxonomy_name.lower().replace(" ", "-").replace("_", "-")
-                
-                # Create taxonomy overview file directly in taxonomies folder
-                taxonomy_file = taxonomies_path / f"{clean_name}-overview.md"
-                taxonomy_content = f"""# {taxonomy_name.title()} - Taxonomy Overview
+            clean_name = taxonomy_name.lower().replace(" ", "-").replace("_", "-")
+            
+            # Create taxonomy overview file directly in taxonomies folder
+            taxonomy_file = taxonomies_path / f"{clean_name}-overview.md"
+            
+            # Create the taxonomy file with provided guidelines
+            taxonomy_content = f"""# {taxonomy_name.title()} - Taxonomy Overview
 
 ## Description
-{taxonomy_desc}
+{taxonomy_description}
 
-## Classification Framework
-This taxonomy provides a systematic way to categorize and understand {taxonomy_name.lower()} within the world. When creating entries in this category, consider:
-
-- **Core characteristics** that define membership in this taxonomy
-- **Variations and subtypes** that exist within this classification
-- **Relationships** to other elements in the world
-- **Cultural or functional significance** within the broader worldbuilding context
-
-## Development Guidelines
-Each {taxonomy_name.lower()} entry should explore:
-- Unique features that distinguish it from similar elements
-- Historical development or origins within the world
-- Impact on other systems, cultures, or regions
-- Potential for future development or change
-
-## Cross-References
-Consider how elements in this taxonomy connect to:
-- Other taxonomies in this world
-- The overall world themes and mechanics
-- Specific locations, cultures, or time periods
+{custom_guidelines}
 """
-                with open(taxonomy_file, "w", encoding="utf-8") as f:
-                    f.write(taxonomy_content)
-                created_folders.append(f"taxonomies/{clean_name}-overview.md")
-                
-                # Generate image for taxonomy if FAL_KEY is available
-                if FAL_AVAILABLE and os.environ.get("FAL_KEY"):
-                    try:
-                        # Create taxonomy-specific prompt
-                        taxonomy_prompt = f"Conceptual illustration of {taxonomy_name}, {taxonomy_desc}, fantasy art style, detailed digital illustration"
-                        
-                        headers = {
-                            "Authorization": f"Key {os.environ.get('FAL_KEY')}",
-                            "Content-Type": "application/json"
-                        }
-                        
-                        payload = {
-                            "prompt": taxonomy_prompt,
-                            "aspect_ratio": "1:1",
-                            "num_images": 1
-                        }
-                        
-                        response = requests.post(
-                            "https://fal.run/fal-ai/imagen4/preview",
-                            headers=headers,
-                            json=payload
-                        )
-                        
-                        if response.status_code == 200:
-                            result = response.json()
-                            if "images" in result and result["images"]:
-                                image_url = result["images"][0]["url"]
-                                image_response = requests.get(image_url)
-                                if image_response.status_code == 200:
-                                    # Save taxonomy image
-                                    images_dir = world_path / "images"
-                                    images_dir.mkdir(exist_ok=True)
-                                    taxonomy_image_path = images_dir / f"{clean_name}-taxonomy.png"
-                                    with open(taxonomy_image_path, "wb") as f:
-                                        f.write(image_response.content)
-                                    created_folders.append(f"images/{clean_name}-taxonomy.png")
-                    except Exception:
-                        # Silently continue if image generation fails
-                        pass
+
+            with open(taxonomy_file, "w", encoding="utf-8") as f:
+                f.write(taxonomy_content)
+            created_folders.append(f"taxonomies/{clean_name}-overview.md")
             
-            # Create corresponding entry folders
+            # Generate image for taxonomy if FAL_KEY is available
+            if FAL_AVAILABLE and os.environ.get("FAL_KEY"):
+                try:
+                    # Create taxonomy-specific prompt
+                    taxonomy_prompt = f"Conceptual illustration of {taxonomy_name}, {taxonomy_description}, fantasy art style, detailed digital illustration"
+                    
+                    headers = {
+                        "Authorization": f"Key {os.environ.get('FAL_KEY')}",
+                        "Content-Type": "application/json"
+                    }
+                    
+                    payload = {
+                        "prompt": taxonomy_prompt,
+                        "aspect_ratio": "1:1",
+                        "num_images": 1
+                    }
+                    
+                    response = requests.post(
+                        "https://fal.run/fal-ai/imagen4/preview",
+                        headers=headers,
+                        json=payload
+                    )
+                    
+                    if response.status_code == 200:
+                        result = response.json()
+                        if "images" in result and result["images"]:
+                            image_url = result["images"][0]["url"]
+                            image_response = requests.get(image_url)
+                            if image_response.status_code == 200:
+                                # Save taxonomy image
+                                images_dir = world_path / "images"
+                                images_dir.mkdir(exist_ok=True)
+                                taxonomy_image_path = images_dir / f"{clean_name}-taxonomy.png"
+                                with open(taxonomy_image_path, "wb") as f:
+                                    f.write(image_response.content)
+                                created_folders.append(f"images/{clean_name}-taxonomy.png")
+                except Exception:
+                    # Silently continue if image generation fails
+                    pass
+            
+            # Create corresponding entry folder for the taxonomy
             entries_path = world_path / "entries"
             entries_path.mkdir(exist_ok=True)
-            
-            for taxonomy in taxonomies:
-                taxonomy_name = taxonomy.get("name", "")
-                clean_name = taxonomy_name.lower().replace(" ", "-").replace("_", "-")
-                entry_path = entries_path / clean_name
-                entry_path.mkdir(exist_ok=True)
-                created_folders.append(f"entries/{clean_name}")
-            
-            folder_list = "\n".join([f"- {folder}" for folder in sorted(created_folders)])
-            taxonomy_names = [t.get("name", "") for t in taxonomies]
-            return [types.TextContent(
-                type="text",
-                text=f"Successfully created taxonomy folders!\n\nCreated:\n{folder_list}\n\nTaxonomies added: {', '.join(taxonomy_names)}\n\nYou can now:\n1. Review the taxonomy overview files for guidance\n2. Add specific entries in the corresponding entries folders\n3. Use the 'create_world_entry' tool to add entries with automatic taxonomy reference"
-            )]
+            entry_path = entries_path / clean_name
+            entry_path.mkdir(exist_ok=True)
+            created_folders.append(f"entries/{clean_name}")
+
+            return [types.TextContent(type="text", text=f"Successfully created taxonomy '{taxonomy_name}'!\n\nCreated:\n" + "\n".join(f"- {folder}" for folder in created_folders))]
             
         except Exception as e:
             return [types.TextContent(type="text", text=f"Error creating taxonomy folders: {str(e)}")]

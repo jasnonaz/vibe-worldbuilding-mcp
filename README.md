@@ -104,8 +104,9 @@ The MCP provides several prompts to guide your worldbuilding process:
 - **save_world_content** - Save worldbuilding content to markdown files
 - **read_world_content** - Read existing worldbuilding files
 - **list_world_files** - List all worldbuilding files in a directory
-- **instantiate_world** - Create a complete world project structure in a uniquely named folder with optional initial taxonomies and descriptions
-- **create_taxonomy_folders** - Add new taxonomy categories with descriptions to an existing world project
+- **instantiate_world** - Create a complete world project structure in a uniquely named folder
+- **generate_taxonomy_guidelines** - Generate structured entry guidelines for a specific taxonomy type
+- **create_taxonomy_folders** - Create a taxonomy with custom guidelines for a world project
 - **create_world_entry** - Create entries within taxonomies that automatically reference the taxonomy overview
 - **generate_image_from_markdown_file** - Generate images from your content (requires API key)
 - **build_static_site** - Generate a static website from your worldbuilding content
@@ -153,7 +154,7 @@ The MCP can generate beautiful static websites from your worldbuilding content u
 1. **Start** with the `start-worldbuilding` prompt to begin
 2. **Create** your world foundation document with core concepts
 3. **Instantiate** your world project using the `instantiate_world` tool with your foundation content
-4. **Add taxonomies** as needed using `create_taxonomy_folders` with descriptions of how they apply to your world
+4. **Add taxonomies** by first using `generate_taxonomy_guidelines` to create custom entry guidelines, then `create_taxonomy_folders` to create the taxonomy with those guidelines
 5. **Develop** specific entries using `create_world_entry` which automatically references the taxonomy context
 6. **Generate** images for your world elements to bring them to life visually
 7. **Review** regularly for consistency and coherence using the consistency-review prompt
