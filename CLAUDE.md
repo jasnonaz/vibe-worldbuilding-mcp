@@ -87,6 +87,7 @@ vibe_worldbuilding/
 5. **Testing**: Verify functionality works end-to-end
 
 ### Code Quality Standards
+- **ALWAYS run tests before committing**: Use `python tests/test_e2e_simple.py` or comprehensive tests
 - Run `python scripts/lint.py` before committing
 - Follow the 200-500 line module size guideline
 - Maintain backward compatibility for MCP tool signatures
