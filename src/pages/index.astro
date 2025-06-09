@@ -6,7 +6,7 @@ import { join, basename } from 'path';
 // Since we're building for a specific world, we'll get the world info from the symlinked content
 let worldTitle = 'World';
 let worldOverview = '';
-let taxonomies: { name: string; description: string; entries: string[] }[] = [];
+let taxonomies: { name: string; description: string; entries: Array<{name: string, isStub: boolean}> }[] = [];
 let headerImagePath = '';
 let atmosphereImagePath = '';
 let conceptImagePath = '';
@@ -52,13 +52,46 @@ try {
     }
     
     // Get entries for this taxonomy
-    let entries: string[] = [];
+    let entries: Array<{name: string, isStub: boolean}> = [];
     try {
       const entriesPath = join(process.cwd(), 'src/content/entries', taxonomyName);
       const entryFiles = await readdir(entriesPath);
-      entries = entryFiles
-        .filter(file => file.endsWith('.md'))
-        .map(file => file.replace('.md', ''));
+      const mdFiles = entryFiles.filter(file => file.endsWith('.md'));
+      
+      for (const file of mdFiles) {
+        const entryName = file.replace('.md', '');
+        let isStub = false;
+        
+        try {
+          const entryContent = await readFile(join(entriesPath, file), 'utf-8');
+          // Parse frontmatter to check for stub status
+          const frontmatterMatch = entryContent.match(/^---\n([\s\S]*?)\n---/);
+          if (frontmatterMatch) {
+            const frontmatter = frontmatterMatch[1];
+            const lines = frontmatter.split('\n');
+            
+            for (const line of lines) {
+              const [key, value] = line.split(':').map(s => s.trim());
+              if (key === 'article_type' && value.replace(/^["']|["']$/g, '') === 'stub') {
+                isStub = true;
+                break;
+              }
+            }
+          }
+        } catch {
+          // Error reading file, treat as non-stub
+        }
+        
+        entries.push({ name: entryName, isStub });
+      }
+      
+      // Sort entries: full entries first, then stubs
+      entries.sort((a, b) => {
+        if (a.isStub === b.isStub) {
+          return a.name.localeCompare(b.name);
+        }
+        return a.isStub ? 1 : -1;
+      });
     } catch {
       // No entries yet
     }
@@ -145,11 +178,20 @@ try {
                 <div style="padding: 0.5rem;">
                   {taxonomy.entries.map(entry => (
                     <a 
-                      href={`/taxonomies/${taxonomy.name}/entries/${entry}`}
-                      style="display: block; padding: 0.25rem 0.5rem; color: #666; text-decoration: none; font-size: 0.9em; border-radius: 3px; margin: 2px 0;"
-                      onmouseover="this.style.backgroundColor='#f0f8ff'; this.style.color='#333';"
-                      onmouseout="this.style.backgroundColor='transparent'; this.style.color='#666';">
-                      {entry.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                      href={`/taxonomies/${taxonomy.name}/entries/${entry.name}`}
+                      style={entry.isStub ? 
+                        "display: block; padding: 0.25rem 0.5rem; color: #cc7a00; text-decoration: none; font-size: 0.9em; border-radius: 3px; margin: 2px 0; font-style: italic;" :
+                        "display: block; padding: 0.25rem 0.5rem; color: #666; text-decoration: none; font-size: 0.9em; border-radius: 3px; margin: 2px 0;"
+                      }
+                      onmouseover={entry.isStub ? 
+                        "this.style.backgroundColor='#fff3e0'; this.style.color='#cc7a00';" :
+                        "this.style.backgroundColor='#f0f8ff'; this.style.color='#333';"
+                      }
+                      onmouseout={entry.isStub ? 
+                        "this.style.backgroundColor='transparent'; this.style.color='#cc7a00';" :
+                        "this.style.backgroundColor='transparent'; this.style.color='#666';"
+                      }>
+                      {entry.name.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}{entry.isStub ? ' (stub)' : ''}
                     </a>
                   ))}
                 </div>
@@ -228,9 +270,12 @@ try {
                 <div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
                   {taxonomy.entries.slice(0, 5).map(entry => (
                     <a 
-                      href={`/taxonomies/${taxonomy.name}/entries/${entry}`}
-                      style="background: #e3f2fd; color: #1976d2; padding: 0.25rem 0.75rem; border-radius: 4px; text-decoration: none; font-size: 0.85em;">
-                      {entry.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                      href={`/taxonomies/${taxonomy.name}/entries/${entry.name}`}
+                      style={entry.isStub ? 
+                        "background: #fff3e0; color: #cc7a00; padding: 0.25rem 0.75rem; border-radius: 4px; text-decoration: none; font-size: 0.85em; font-style: italic;" :
+                        "background: #e3f2fd; color: #1976d2; padding: 0.25rem 0.75rem; border-radius: 4px; text-decoration: none; font-size: 0.85em;"
+                      }>
+                      {entry.name.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}{entry.isStub ? ' (stub)' : ''}
                     </a>
                   ))}
                   {taxonomy.entries.length > 5 && (

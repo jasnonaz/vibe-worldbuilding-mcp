@@ -10,6 +10,7 @@ This MCP helps you build rich, cohesive fictional worlds through a structured ap
 
 - **Structured Worldbuilding Prompts**: Guided workflows for developing different aspects of your world
 - **Content Management**: Save, read, and organize your worldbuilding content in markdown files  
+- **Auto-Stub Generation**: Automatically identify and create stub entries for entities mentioned in your content
 - **Image Generation**: Create visual representations of your world elements using Google Imagen
 - **Static Site Generation**: Build beautiful websites from your worldbuilding content using Astro
 - **Consistency Tools**: Review and maintain coherence across your world's elements
@@ -108,6 +109,8 @@ The MCP provides several prompts to guide your worldbuilding process:
 - **generate_taxonomy_guidelines** - Generate structured entry guidelines for a specific taxonomy type
 - **create_taxonomy_folders** - Create a taxonomy with custom guidelines for a world project
 - **create_world_entry** - Create entries within taxonomies that automatically reference the taxonomy overview
+- **identify_stub_candidates** - Analyze entry content to identify entities that should become stub entries
+- **create_stub_entries** - Create multiple stub entries based on analysis
 - **generate_image_from_markdown_file** - Generate images from your content (requires API key)
 - **build_static_site** - Generate a static website from your worldbuilding content
 
@@ -126,6 +129,28 @@ The MCP can generate images for your world elements using FAL's Imagen4 API. Aft
    - **Aspect ratio**: Choose from 1:1, 16:9, 9:16, 3:4, or 4:3
 
 You can then upload the generated image to Claude to view it in your conversation.
+
+## Auto-Stub Generation
+
+The MCP includes intelligent stub generation to help you quickly expand your world by creating placeholder entries for entities mentioned in your content.
+
+### How It Works
+
+1. **Create an entry** using `create_world_entry` 
+2. **Analyze the content** using `identify_stub_candidates` - this presents the entry content to Claude along with existing taxonomies and entries
+3. **Claude identifies** entities that deserve their own entries (characters, locations, items, etc.)
+4. **Create stubs** using `create_stub_entries` with the identified entities
+5. **Stub entries** are created with brief descriptions and marked as stubs for future development
+
+### Stub Entry Features
+
+- **Brief descriptions**: 1-2 sentences explaining what the entity is
+- **Proper categorization**: Placed in appropriate taxonomies (existing or new)
+- **Stub markers**: Clearly marked as needing further development
+- **Avoiding duplicates**: Won't create entries that already exist
+- **Taxonomy creation**: Can create new taxonomies if needed for new entity types
+
+This feature helps you maintain comprehensive world coverage without losing track of important elements mentioned in your detailed entries.
 
 ## Static Site Generation
 
@@ -156,9 +181,10 @@ The MCP can generate beautiful static websites from your worldbuilding content u
 3. **Instantiate** your world project using the `instantiate_world` tool with your foundation content
 4. **Add taxonomies** by first using `generate_taxonomy_guidelines` to create custom entry guidelines, then `create_taxonomy_folders` to create the taxonomy with those guidelines
 5. **Develop** specific entries using `create_world_entry` which automatically references the taxonomy context
-6. **Generate** images for your world elements to bring them to life visually
-7. **Review** regularly for consistency and coherence using the consistency-review prompt
-8. **Continue** each new session with `continue-worldbuilding`
+6. **Create stub entries** for referenced entities using `identify_stub_candidates` and `create_stub_entries` tools
+7. **Generate** images for your world elements to bring them to life visually
+8. **Review** regularly for consistency and coherence using the consistency-review prompt
+9. **Continue** each new session with `continue-worldbuilding`
 
 ## Example Session
 
@@ -184,6 +210,10 @@ Claude: [Uses create_taxonomy_folders tool with taxonomy name and description of
 User: Let me create an entry for the "Church of Resonance".
 
 Claude: [Uses create_world_entry tool which automatically includes the religions taxonomy context]
+
+User: I notice this entry mentions several characters and a sacred artifact. Let's create stubs for them.
+
+Claude: [Uses identify_stub_candidates tool to analyze the content, then create_stub_entries to generate placeholder entries]
 
 User: Now generate an image for the world overview.
 
