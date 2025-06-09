@@ -159,7 +159,7 @@ CREATE_TAXONOMY_FOLDERS_SCHEMA = types.Tool(
 # Entry Tools
 CREATE_WORLD_ENTRY_SCHEMA = types.Tool(
     name="create_world_entry",
-    description="Create a detailed entry for a specific world element within a taxonomy, referencing the taxonomy description",
+    description="Create a detailed entry for a specific world element within a taxonomy. Call without entry_content to get world context, then call again with content to create the entry.",
     inputSchema={
         "type": "object",
         "properties": {
@@ -177,10 +177,11 @@ CREATE_WORLD_ENTRY_SCHEMA = types.Tool(
             },
             "entry_content": {
                 "type": "string",
-                "description": "Markdown content for the entry"
+                "description": "Markdown content for the entry (optional - omit to get world context first)",
+                "default": ""
             }
         },
-        "required": ["world_directory", "taxonomy", "entry_name", "entry_content"]
+        "required": ["world_directory", "taxonomy", "entry_name"]
     }
 )
 
@@ -239,6 +240,65 @@ CREATE_STUB_ENTRIES_SCHEMA = types.Tool(
         "required": ["world_directory", "stub_entries"]
     }
 )
+
+ADD_FRONTMATTER_TO_ENTRIES_SCHEMA = types.Tool(
+    name="add_frontmatter_to_entries",
+    description="Add YAML frontmatter with descriptions to existing entries",
+    inputSchema={
+        "type": "object",
+        "properties": {
+            "world_directory": {
+                "type": "string",
+                "description": "Path to the world directory"
+            }
+        },
+        "required": ["world_directory"]
+    }
+)
+
+GENERATE_ENTRY_DESCRIPTIONS_SCHEMA = types.Tool(
+    name="generate_entry_descriptions",
+    description="Present entry content to client LLM for intelligent description generation",
+    inputSchema={
+        "type": "object",
+        "properties": {
+            "world_directory": {
+                "type": "string",
+                "description": "Path to the world directory"
+            }
+        },
+        "required": ["world_directory"]
+    }
+)
+
+APPLY_ENTRY_DESCRIPTIONS_SCHEMA = types.Tool(
+    name="apply_entry_descriptions",
+    description="Apply generated descriptions to entry frontmatter",
+    inputSchema={
+        "type": "object",
+        "properties": {
+            "world_directory": {
+                "type": "string",
+                "description": "Path to the world directory"
+            },
+            "entry_descriptions": {
+                "type": "array",
+                "description": "List of entry descriptions to apply",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string", "description": "Name of the entry"},
+                        "description": {"type": "string", "description": "Generated description for the entry"}
+                    },
+                    "required": ["name", "description"]
+                }
+            }
+        },
+        "required": ["world_directory", "entry_descriptions"]
+    }
+)
+
+
 
 
 # Image Generation Tools
@@ -317,6 +377,9 @@ ENTRY_TOOLS = [
     CREATE_WORLD_ENTRY_SCHEMA,
     IDENTIFY_STUB_CANDIDATES_SCHEMA,
     CREATE_STUB_ENTRIES_SCHEMA,
+    ADD_FRONTMATTER_TO_ENTRIES_SCHEMA,
+    GENERATE_ENTRY_DESCRIPTIONS_SCHEMA,
+    APPLY_ENTRY_DESCRIPTIONS_SCHEMA,
 ]
 
 IMAGE_TOOLS = [

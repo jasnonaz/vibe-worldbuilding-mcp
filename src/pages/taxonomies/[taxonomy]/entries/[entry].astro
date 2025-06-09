@@ -43,25 +43,44 @@ const { taxonomy, entry } = Astro.params;
 let entryContent = '';
 let entryTitle = entry?.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) || 'Unknown Entry';
 let taxonomyContext = '';
+let articleType = 'full';
 
 try {
   const entryPath = join(process.cwd(), 'src/content/entries', taxonomy!, `${entry}.md`);
   const rawContent = await readFile(entryPath, 'utf-8');
   
+  // Parse frontmatter
+  let contentWithoutFrontmatter = rawContent;
+  const frontmatterMatch = rawContent.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
+  if (frontmatterMatch) {
+    const frontmatterText = frontmatterMatch[1];
+    contentWithoutFrontmatter = frontmatterMatch[2];
+    
+    // Parse frontmatter fields
+    const frontmatterLines = frontmatterText.split('\n');
+    for (const line of frontmatterLines) {
+      if (line.includes(':')) {
+        const [key, value] = line.split(':', 2);
+        const cleanKey = key.trim();
+        const cleanValue = value.trim().replace(/^["']|["']$/g, '');
+        
+        if (cleanKey === 'article_type') {
+          articleType = cleanValue;
+        } else if (cleanKey === 'taxonomyContext') {
+          taxonomyContext = cleanValue;
+        }
+      }
+    }
+  }
+  
   // Extract title from markdown if present
-  const titleMatch = rawContent.match(/^# (.+)$/m);
+  const titleMatch = contentWithoutFrontmatter.match(/^# (.+)$/m);
   if (titleMatch) {
     entryTitle = titleMatch[1];
   }
-
-  // Extract taxonomy context if present
-  const contextMatch = rawContent.match(/---\n\*\*Taxonomy Context\*\*: (.+?)\n---/s);
-  if (contextMatch) {
-    taxonomyContext = contextMatch[1];
-  }
   
   // Simple markdown to HTML conversion
-  entryContent = rawContent
+  entryContent = contentWithoutFrontmatter
     .replace(/^### (.+)$/gm, '<h3>$1</h3>')
     .replace(/^## (.+)$/gm, '<h2>$1</h2>')
     .replace(/^# (.+)$/gm, '<h1>$1</h1>')
@@ -69,6 +88,7 @@ try {
     .replace(/^- (.+)$/gm, '<li>$1</li>')
     .replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>')
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" style="color: #007acc; text-decoration: underline;">$1</a>')
     .replace(/\n\n/g, '</p><p>')
     .replace(/^(?!<)(.+)$/gm, '<p>$1</p>')
     .replace(/<p><\/p>/g, '');
@@ -116,13 +136,56 @@ try {
 }
 
 // Get other entries in this taxonomy for navigation
-let otherEntries: string[] = [];
+let otherEntries: Array<{slug: string, title: string, isStub: boolean}> = [];
 try {
   const entriesPath = join(process.cwd(), 'src/content/entries', taxonomy!);
   const files = await readdir(entriesPath);
-  otherEntries = files
-    .filter(file => file.endsWith('.md') && file.replace('.md', '') !== entry)
-    .map(file => file.replace('.md', ''));
+  
+  for (const file of files) {
+    if (file.endsWith('.md') && file.replace('.md', '') !== entry) {
+      const entrySlug = file.replace('.md', '');
+      let entryTitle = entrySlug.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+      let isStub = false;
+      
+      try {
+        const entryContent = await readFile(join(entriesPath, file), 'utf-8');
+        
+        // Parse frontmatter to get article_type
+        const frontmatterMatch = entryContent.match(/^---\n([\s\S]*?)\n---\n/);
+        if (frontmatterMatch) {
+          const frontmatterText = frontmatterMatch[1];
+          const frontmatterLines = frontmatterText.split('\n');
+          for (const line of frontmatterLines) {
+            if (line.includes(':')) {
+              const [key, value] = line.split(':', 2);
+              if (key.trim() === 'article_type' && value.trim().replace(/^["']|["']$/g, '') === 'stub') {
+                isStub = true;
+                break;
+              }
+            }
+          }
+        }
+        
+        // Extract title from content
+        const titleMatch = entryContent.match(/^# (.+)$/m);
+        if (titleMatch) {
+          entryTitle = titleMatch[1];
+        }
+      } catch {
+        // Use default title if can't read file
+      }
+      
+      otherEntries.push({ slug: entrySlug, title: entryTitle, isStub });
+    }
+  }
+  
+  // Sort entries: full entries first, then stubs
+  otherEntries.sort((a, b) => {
+    if (a.isStub !== b.isStub) {
+      return a.isStub ? 1 : -1; // Full entries first
+    }
+    return a.title.localeCompare(b.title); // Alphabetical within each group
+  });
 } catch {
   // No other entries found
 }
@@ -150,12 +213,23 @@ const taxonomyTitle = taxonomy?.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpp
         <span style="color: #ccc; margin: 0 0.5rem;">›</span>
         <a href={`/taxonomies/${taxonomy}`} style="color: #666; text-decoration: none;">{taxonomyTitle}</a>
         <span style="color: #ccc; margin: 0 0.5rem;">›</span>
-        <span style="color: #333;">{entryTitle}</span>
+        <span style="color: #333;">
+          {entryTitle}
+          {articleType === 'stub' && <span style="color: #888; font-size: 0.9em;"> (stub)</span>}
+        </span>
       </nav>
-      <h1>{entryTitle}</h1>
+      <h1>
+        {entryTitle}
+        {articleType === 'stub' && <span style="color: #888; font-size: 0.7em; font-weight: normal; margin-left: 0.5rem;">(stub)</span>}
+      </h1>
       <p style="color: #666;">
         {taxonomyTitle} in {worldTitle}
       </p>
+      {articleType === 'stub' && (
+        <div style="background: #fff3cd; border: 1px solid #ffeaa7; border-radius: 4px; padding: 0.75rem; margin: 1rem 0; color: #856404;">
+          <strong>📝 Stub Entry:</strong> This is a placeholder entry that needs further development and detail.
+        </div>
+      )}
     </div>
 
     {taxonomyContext && (
@@ -194,10 +268,10 @@ const taxonomyTitle = taxonomy?.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpp
             {otherEntries.map(otherEntry => (
               <li style="margin: 0.5rem 0;">
                 <a 
-                  href={`/taxonomies/${taxonomy}/entries/${otherEntry}`}
+                  href={`/taxonomies/${taxonomy}/entries/${otherEntry.slug}`}
                   style="color: #007acc; text-decoration: none; font-size: 0.9em;"
                 >
-                  {otherEntry.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                  {otherEntry.title}{otherEntry.isStub && ' (stub)'}
                 </a>
               </li>
             ))}
@@ -212,6 +286,7 @@ const taxonomyTitle = taxonomy?.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpp
       <div class="entry-meta">
         <p>
           <strong>Entry Type:</strong> {taxonomyTitle} • 
+          <strong>Article Type:</strong> {articleType === 'stub' ? 'Stub Entry' : 'Full Entry'} • 
           <strong>World:</strong> {worldTitle}
         </p>
       </div>

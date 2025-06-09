@@ -13,9 +13,15 @@ from ..config import (
     FAL_AVAILABLE, FAL_API_KEY, FAL_API_URL, MARKDOWN_EXTENSION, 
     IMAGE_EXTENSION, TAXONOMY_OVERVIEW_SUFFIX, MAX_DESCRIPTION_LINES
 )
+from ..utils.content_parsing import (
+    extract_frontmatter, 
+    add_frontmatter_to_content,
+    extract_description_from_content
+)
 
 if FAL_AVAILABLE:
     import requests
+
 
 
 async def create_world_entry(arguments: dict[str, Any] | None) -> list[types.TextContent]:
@@ -38,8 +44,8 @@ async def create_world_entry(arguments: dict[str, Any] | None) -> list[types.Tex
     entry_name = arguments.get("entry_name", "")
     entry_content = arguments.get("entry_content", "")
     
-    if not all([world_directory, taxonomy, entry_name, entry_content]):
-        return [types.TextContent(type="text", text="Error: All parameters (world_directory, taxonomy, entry_name, entry_content) are required")]
+    if not all([world_directory, taxonomy, entry_name]):
+        return [types.TextContent(type="text", text="Error: world_directory, taxonomy, and entry_name are required")]
     
     try:
         world_path = Path(world_directory)
@@ -53,31 +59,61 @@ async def create_world_entry(arguments: dict[str, Any] | None) -> list[types.Tex
         # Extract taxonomy context if available
         taxonomy_context = _extract_taxonomy_context(world_path, clean_taxonomy)
         
-        # Create the entry file
-        entry_file = _create_entry_file(
-            world_path, clean_taxonomy, clean_entry, entry_name, 
-            entry_content, taxonomy, taxonomy_context
+        # Get world context for generating well-connected entries
+        existing_taxonomies = _get_existing_taxonomies(world_path)
+        existing_entries = _get_existing_entries_with_descriptions(world_path)
+        
+        # Get world overview if available
+        world_overview = ""
+        overview_path = world_path / "overview" / "world-overview.md"
+        if overview_path.exists():
+            try:
+                with open(overview_path, "r", encoding="utf-8") as f:
+                    content = f.read()
+                    world_overview = content[:500] + ("..." if len(content) > 500 else "")
+            except Exception:
+                pass
+        
+        # Create comprehensive world context for the LLM
+        world_context = _create_world_context_prompt(
+            existing_taxonomies, existing_entries, taxonomy_context, 
+            world_overview, taxonomy
         )
         
-        # Generate entry image if FAL API is available
-        image_info = await _generate_entry_image(
-            world_path, clean_taxonomy, clean_entry, entry_name, 
-            entry_content, taxonomy_context
-        )
         
-        # Generate auto-stub analysis
-        stub_analysis_info = _generate_stub_analysis(
-            world_path, entry_name, taxonomy, entry_content
-        )
-        
-        # Create response
-        relative_path = str(entry_file.relative_to(world_path))
-        context_info = f"\n\nTaxonomy context included: {taxonomy_context[:100]}..." if taxonomy_context else "\n\nNo taxonomy overview found for reference."
-        
-        return [types.TextContent(
-            type="text",
-            text=f"Successfully created entry '{entry_name}' in {taxonomy} taxonomy!\n\nSaved to: {relative_path}{context_info}\n\nThe entry includes:\n1. Automatic reference to the taxonomy overview\n2. Your detailed content\n3. Taxonomy classification footer{image_info}{stub_analysis_info}"
-        )]
+        # Always show context first, then handle entry creation
+        if entry_content.strip():
+            # Create the entry file
+            entry_file = _create_entry_file(
+                world_path, clean_taxonomy, clean_entry, entry_name, 
+                entry_content, taxonomy, taxonomy_context
+            )
+            
+            # Generate entry image if FAL API is available
+            image_info = await _generate_entry_image(
+                world_path, clean_taxonomy, clean_entry, entry_name, 
+                entry_content, taxonomy_context
+            )
+            
+            # Generate auto-stub analysis
+            stub_analysis_info = _generate_stub_analysis(
+                world_path, entry_name, taxonomy, entry_content
+            )
+            
+            # Create response with context + creation result
+            relative_path = str(entry_file.relative_to(world_path))
+            context_info = f"\n\nTaxonomy context included: {taxonomy_context[:100]}..." if taxonomy_context else "\n\nNo taxonomy overview found for reference."
+            
+            return [types.TextContent(
+                type="text",
+                text=f"# World Context Used for '{entry_name}'\n\n{world_context}\n\n---\n\n## Entry Created Successfully!\n\nSaved to: {relative_path}{context_info}\n\nThe entry includes:\n1. YAML frontmatter with description\n2. Your detailed content\n3. Taxonomy classification footer{image_info}{stub_analysis_info}\n\n**Note**: Review the content above - it should include crosslinks to existing entries based on the context provided."
+            )]
+        else:
+            # Return world context for entry generation
+            return [types.TextContent(
+                type="text",
+                text=f"# World Context for Creating '{entry_name}' in {taxonomy}\n\n{world_context}\n\n---\n\n**Next Step**: Generate entry content that references existing entries using the linking format provided above, then call this tool again with your `entry_content`."
+            )]
         
     except Exception as e:
         return [types.TextContent(type="text", text=f"Error creating world entry: {str(e)}")]
@@ -114,7 +150,7 @@ async def identify_stub_candidates(arguments: dict[str, Any] | None) -> list[typ
         
         # Get world context
         existing_taxonomies = _get_existing_taxonomies(world_path)
-        existing_entries = _get_existing_entries(world_path)
+        existing_entries = _get_existing_entries_with_descriptions(world_path)
         
         # Create analysis prompt
         analysis_prompt = _create_analysis_prompt(
@@ -125,6 +161,243 @@ async def identify_stub_candidates(arguments: dict[str, Any] | None) -> list[typ
         
     except Exception as e:
         return [types.TextContent(type="text", text=f"Error analyzing entry for stub candidates: {str(e)}")]
+
+
+async def generate_entry_descriptions(arguments: dict[str, Any] | None) -> list[types.TextContent]:
+    """Present entry content to client LLM for description generation.
+    
+    This tool presents entries without descriptions to the client LLM
+    for intelligent description generation, following the LLM-first design principle.
+    
+    Args:
+        arguments: Tool arguments containing world_directory
+        
+    Returns:
+        List containing analysis prompt for the client LLM
+    """
+    if not arguments:
+        return [types.TextContent(type="text", text="Error: No arguments provided")]
+    
+    world_directory = arguments.get("world_directory", "")
+    
+    if not world_directory:
+        return [types.TextContent(type="text", text="Error: world_directory is required")]
+    
+    try:
+        world_path = Path(world_directory)
+        if not world_path.exists():
+            return [types.TextContent(type="text", text=f"Error: World directory {world_directory} does not exist")]
+        
+        entries_path = world_path / "entries"
+        if not entries_path.exists():
+            return [types.TextContent(type="text", text="No entries directory found")]
+        
+        entries_needing_descriptions = []
+        
+        # Find entries without descriptions
+        for taxonomy_dir in entries_path.iterdir():
+            if taxonomy_dir.is_dir():
+                for entry_file in taxonomy_dir.glob(f"*{MARKDOWN_EXTENSION}"):
+                    try:
+                        with open(entry_file, "r", encoding="utf-8") as f:
+                            content = f.read()
+                        
+                        # Check if already has frontmatter with description
+                        existing_frontmatter, main_content = extract_frontmatter(content)
+                        if "description" not in existing_frontmatter:
+                            entry_name = entry_file.stem.replace("-", " ").title()
+                            taxonomy_name = taxonomy_dir.name.replace("-", " ").title()
+                            
+                            entries_needing_descriptions.append({
+                                "name": entry_name,
+                                "taxonomy": taxonomy_name,
+                                "content": main_content[:500] + ("..." if len(main_content) > 500 else ""),
+                                "file_path": str(entry_file.relative_to(world_path))
+                            })
+                    except Exception:
+                        continue
+        
+        if not entries_needing_descriptions:
+            return [types.TextContent(type="text", text="All entries already have descriptions in their frontmatter.")]
+        
+        # Create analysis prompt for LLM
+        prompt = _create_description_generation_prompt(entries_needing_descriptions)
+        return [types.TextContent(type="text", text=prompt)]
+        
+    except Exception as e:
+        return [types.TextContent(type="text", text=f"Error analyzing entries for descriptions: {str(e)}")]
+
+
+async def add_frontmatter_to_entries(arguments: dict[str, Any] | None) -> list[types.TextContent]:
+    """Add YAML frontmatter with descriptions to existing entries.
+    
+    Processes all entry files in a world directory, extracting descriptions
+    from their content and adding them as YAML frontmatter. Useful for
+    retrofitting existing entries with metadata.
+    
+    Args:
+        arguments: Tool arguments containing world_directory
+        
+    Returns:
+        List containing summary of updated entries
+    """
+    if not arguments:
+        return [types.TextContent(type="text", text="Error: No arguments provided")]
+    
+    world_directory = arguments.get("world_directory", "")
+    
+    if not world_directory:
+        return [types.TextContent(type="text", text="Error: world_directory is required")]
+    
+    try:
+        world_path = Path(world_directory)
+        if not world_path.exists():
+            return [types.TextContent(type="text", text=f"Error: World directory {world_directory} does not exist")]
+        
+        entries_path = world_path / "entries"
+        if not entries_path.exists():
+            return [types.TextContent(type="text", text="No entries directory found")]
+        
+        updated_count = 0
+        skipped_count = 0
+        error_count = 0
+        
+        # Process all entry files
+        for taxonomy_dir in entries_path.iterdir():
+            if taxonomy_dir.is_dir():
+                for entry_file in taxonomy_dir.glob(f"*{MARKDOWN_EXTENSION}"):
+                    try:
+                        # Read existing content
+                        with open(entry_file, "r", encoding="utf-8") as f:
+                            content = f.read()
+                        
+                        # Check if already has frontmatter with description
+                        existing_frontmatter, _ = extract_frontmatter(content)
+                        if "description" in existing_frontmatter:
+                            skipped_count += 1
+                            continue
+                        
+                        # Extract description and add frontmatter
+                        description = extract_description_from_content(content)
+                        if description:
+                            updated_content = add_frontmatter_to_content(content, {
+                                "description": description
+                            })
+                            
+                            # Write updated content
+                            with open(entry_file, "w", encoding="utf-8") as f:
+                                f.write(updated_content)
+                            
+                            updated_count += 1
+                        else:
+                            skipped_count += 1
+                            
+                    except Exception as e:
+                        error_count += 1
+                        print(f"Error processing {entry_file}: {e}")
+        
+        # Create summary
+        summary = f"Frontmatter update completed:\n"
+        summary += f"- Updated: {updated_count} entries\n"
+        summary += f"- Skipped: {skipped_count} entries (already had description or no content)\n"
+        if error_count > 0:
+            summary += f"- Errors: {error_count} entries\n"
+        
+        return [types.TextContent(type="text", text=summary)]
+        
+    except Exception as e:
+        return [types.TextContent(type="text", text=f"Error adding frontmatter to entries: {str(e)}")]
+
+
+async def apply_entry_descriptions(arguments: dict[str, Any] | None) -> list[types.TextContent]:
+    """Apply generated descriptions to entry frontmatter.
+    
+    Takes a list of entry names and descriptions from the client LLM
+    and applies them as YAML frontmatter to the corresponding entry files.
+    
+    Args:
+        arguments: Tool arguments containing world_directory and entry_descriptions list
+        
+    Returns:
+        List containing summary of updated entries
+    """
+    if not arguments:
+        return [types.TextContent(type="text", text="Error: No arguments provided")]
+    
+    world_directory = arguments.get("world_directory", "")
+    entry_descriptions = arguments.get("entry_descriptions", [])
+    
+    if not world_directory or not entry_descriptions:
+        return [types.TextContent(type="text", text="Error: world_directory and entry_descriptions are required")]
+    
+    try:
+        world_path = Path(world_directory)
+        if not world_path.exists():
+            return [types.TextContent(type="text", text=f"Error: World directory {world_directory} does not exist")]
+        
+        entries_path = world_path / "entries"
+        if not entries_path.exists():
+            return [types.TextContent(type="text", text="No entries directory found")]
+        
+        updated_count = 0
+        not_found_count = 0
+        error_count = 0
+        
+        # Create a mapping of entry names to find files
+        entry_file_map = {}
+        for taxonomy_dir in entries_path.iterdir():
+            if taxonomy_dir.is_dir():
+                for entry_file in taxonomy_dir.glob(f"*{MARKDOWN_EXTENSION}"):
+                    entry_name = entry_file.stem.replace("-", " ").title()
+                    entry_file_map[entry_name] = entry_file
+        
+        # Apply descriptions
+        for desc_entry in entry_descriptions:
+            entry_name = desc_entry.get("name", "")
+            description = desc_entry.get("description", "")
+            
+            if not entry_name or not description:
+                error_count += 1
+                continue
+            
+            if entry_name not in entry_file_map:
+                not_found_count += 1
+                continue
+            
+            try:
+                entry_file = entry_file_map[entry_name]
+                
+                # Read existing content
+                with open(entry_file, "r", encoding="utf-8") as f:
+                    content = f.read()
+                
+                # Add frontmatter with description
+                updated_content = add_frontmatter_to_content(content, {
+                    "description": description
+                })
+                
+                # Write updated content
+                with open(entry_file, "w", encoding="utf-8") as f:
+                    f.write(updated_content)
+                
+                updated_count += 1
+                
+            except Exception as e:
+                error_count += 1
+        
+        # Create summary
+        summary = f"Applied descriptions to entries:\n"
+        summary += f"- Updated: {updated_count} entries\n"
+        if not_found_count > 0:
+            summary += f"- Not found: {not_found_count} entries\n"
+        if error_count > 0:
+            summary += f"- Errors: {error_count} entries\n"
+        
+        return [types.TextContent(type="text", text=summary)]
+        
+    except Exception as e:
+        return [types.TextContent(type="text", text=f"Error applying entry descriptions: {str(e)}")]
+
 
 
 async def create_stub_entries(arguments: dict[str, Any] | None) -> list[types.TextContent]:
@@ -210,26 +483,28 @@ def _create_entry_file(
     world_path: Path, clean_taxonomy: str, clean_entry: str, entry_name: str,
     entry_content: str, taxonomy: str, taxonomy_context: str
 ) -> Path:
-    """Create the entry file with proper formatting."""
+    """Create the entry file with proper formatting and frontmatter."""
     entry_path = world_path / "entries" / clean_taxonomy
     entry_path.mkdir(parents=True, exist_ok=True)
     
     entry_file = entry_path / f"{clean_entry}{MARKDOWN_EXTENSION}"
     
-    # Add taxonomy context header if available
-    header = ""
-    if taxonomy_context:
-        header = f"""---
-taxonomyContext: "{taxonomy_context}"
----
-
-"""
+    # Extract description for frontmatter
+    description = extract_description_from_content(entry_content)
     
-    final_content = f"""{header}{entry_content}
-
----
-*Entry in {taxonomy.title()} taxonomy*
-"""
+    # Build frontmatter
+    frontmatter = {
+        "description": description,
+        "article_type": "full"
+    }
+    if taxonomy_context:
+        frontmatter["taxonomyContext"] = taxonomy_context
+    
+    # Add frontmatter to content
+    final_content = add_frontmatter_to_content(entry_content, frontmatter)
+    
+    # Add taxonomy footer
+    final_content += f"\n\n---\n*Entry in {taxonomy.title()} taxonomy*\n"
     
     with open(entry_file, "w", encoding="utf-8") as f:
         f.write(final_content)
@@ -317,10 +592,18 @@ def _generate_stub_analysis(
     """Generate the auto-stub analysis section."""
     try:
         existing_taxonomies = _get_existing_taxonomies(world_path)
-        existing_entries = _get_existing_entries(world_path)
+        existing_entries = _get_existing_entries_with_descriptions(world_path)
         
         taxonomies_list = "\n".join([f"- {tax}" for tax in existing_taxonomies]) if existing_taxonomies else "- No existing taxonomies found"
-        entries_list = "\n".join([f"- {entry['name']} ({entry['taxonomy']})" for entry in existing_entries]) if existing_entries else "- No existing entries found"
+        
+        # Include descriptions for better context
+        if existing_entries:
+            entries_list = "\n".join([
+                f"- **{entry['name']}** ({entry['taxonomy']}): {entry['description'][:100]}{'...' if len(entry['description']) > 100 else ''}"
+                for entry in existing_entries
+            ])
+        else:
+            entries_list = "- No existing entries found"
         
         stub_analysis_prompt = f"""# Auto-Stub Generation Analysis
 
@@ -399,13 +682,55 @@ def _get_existing_entries(world_path: Path) -> List[Dict[str, str]]:
     return existing_entries
 
 
+def _get_existing_entries_with_descriptions(world_path: Path) -> List[Dict[str, str]]:
+    """Get list of existing entries with their descriptions for context."""
+    entries_path = world_path / "entries"
+    existing_entries = []
+    
+    if entries_path.exists():
+        for taxonomy_dir in entries_path.iterdir():
+            if taxonomy_dir.is_dir():
+                for entry_file in taxonomy_dir.glob(f"*{MARKDOWN_EXTENSION}"):
+                    try:
+                        with open(entry_file, "r", encoding="utf-8") as f:
+                            content = f.read()
+                        
+                        # Extract frontmatter description or generate one
+                        frontmatter, _ = extract_frontmatter(content)
+                        description = frontmatter.get("description", "")
+                        
+                        if not description:
+                            description = extract_description_from_content(content, max_words=50)
+                        
+                        entry_stem = entry_file.stem.replace("-", " ").title()
+                        existing_entries.append({
+                            "name": entry_stem,
+                            "taxonomy": taxonomy_dir.name.replace("-", " ").title(),
+                            "description": description,
+                            "filename": entry_file.stem
+                        })
+                    except Exception:
+                        # Skip entries we can't read
+                        continue
+    
+    return existing_entries
+
+
 def _create_analysis_prompt(
     entry_name: str, taxonomy: str, entry_content: str,
     existing_taxonomies: List[str], existing_entries: List[Dict[str, str]]
 ) -> str:
     """Create the stub candidate analysis prompt."""
     taxonomies_list = "\n".join([f"- {tax}" for tax in existing_taxonomies]) if existing_taxonomies else "- No existing taxonomies found"
-    entries_list = "\n".join([f"- {entry['name']} ({entry['taxonomy']})" for entry in existing_entries]) if existing_entries else "- No existing entries found"
+    
+    # Include descriptions for better context
+    if existing_entries:
+        entries_list = "\n".join([
+            f"- **{entry['name']}** ({entry['taxonomy']}): {entry.get('description', 'No description')[:100]}{'...' if len(entry.get('description', '')) > 100 else ''}"
+            for entry in existing_entries
+        ])
+    else:
+        entries_list = "- No existing entries found"
     
     return f"""# Stub Candidate Analysis
 
@@ -495,7 +820,7 @@ def _process_single_stub(world_path: Path, stub: Dict[str, Any]) -> Dict[str, An
     if entry_file.exists():
         return result
     
-    # Create stub content
+    # Create stub content with frontmatter
     stub_content = f"""# {name}
 
 {description}
@@ -507,8 +832,14 @@ def _process_single_stub(world_path: Path, stub: Dict[str, Any]) -> Dict[str, An
 *Entry in {taxonomy.title()} taxonomy*
 """
     
+    # Add frontmatter with description and article type
+    final_stub_content = add_frontmatter_to_content(stub_content, {
+        "description": description,
+        "article_type": "stub"
+    })
+    
     with open(entry_file, "w", encoding="utf-8") as f:
-        f.write(stub_content)
+        f.write(final_stub_content)
     
     result["created_stub"] = True
     result["stub_info"] = {
@@ -568,6 +899,122 @@ Descriptive and immersive, maintaining consistency with the world's established 
     taxonomy_entries_path.mkdir(exist_ok=True)
 
 
+def _create_world_context_prompt(
+    existing_taxonomies: List[str], existing_entries: List[Dict[str, str]], 
+    taxonomy_context: str, world_overview: str, target_taxonomy: str = ""
+) -> str:
+    """Create a comprehensive world context prompt for entry generation."""
+    prompt = """# World Context for Entry Generation
+
+## World Overview
+"""
+    
+    if world_overview:
+        prompt += f"{world_overview}\n\n"
+    else:
+        prompt += "No world overview available.\n\n"
+    
+    prompt += "## Available Taxonomies\n"
+    if existing_taxonomies:
+        prompt += "\n".join([f"- **{tax}**" for tax in existing_taxonomies])
+        prompt += "\n\n"
+    else:
+        prompt += "No existing taxonomies found.\n\n"
+    
+    if target_taxonomy and taxonomy_context:
+        prompt += f"## {target_taxonomy} Taxonomy Context\n{taxonomy_context}\n\n"
+    
+    prompt += "## Existing Entries\n"
+    if existing_entries:
+        prompt += "Here are the existing entries in this world to help you create consistent, well-connected content:\n\n"
+        
+        # Group by taxonomy
+        by_taxonomy = {}
+        for entry in existing_entries:
+            tax = entry['taxonomy']
+            if tax not in by_taxonomy:
+                by_taxonomy[tax] = []
+            by_taxonomy[tax].append(entry)
+        
+        for taxonomy, entries in by_taxonomy.items():
+            prompt += f"### {taxonomy}\n"
+            for entry in entries:
+                # Include file path for static site linking
+                clean_taxonomy = taxonomy.lower().replace(" ", "-")
+                clean_name = entry['name'].lower().replace(" ", "-")
+                site_path = f"/taxonomies/{clean_taxonomy}/entries/{clean_name}"
+                prompt += f"- **{entry['name']}**: {entry['description']}\n  *Link as: `[{entry['name']}]({site_path})`*\n"
+            prompt += "\n"
+    else:
+        prompt += "No existing entries found.\n\n"
+    
+    prompt += """## Guidelines for New Entries
+When creating new entries, consider:
+
+1. **Consistency**: How does this entry fit with existing world elements?
+2. **Connections**: What relationships exist with other entries?
+3. **Uniqueness**: What makes this entry distinctive in this world?
+4. **Integration**: How does this connect to the broader world themes?
+5. **Linking**: When you mention existing entries, create markdown links using the paths provided above
+
+## Linking Instructions
+**IMPORTANT**: When you reference any of the existing entries listed above in your content:
+- Use the exact link format provided: `[Entry Name](/taxonomies/taxonomy/entries/entry-name)`
+- This creates proper navigation in the static site between related world elements
+- **Link sparingly**: Only link when the reference is central to understanding this entry
+- Focus on key relationships and major connections, not every mention
+- Don't over-link - aim for 2-4 meaningful links per entry at most
+- Don't link common words that happen to match entry names
+- Skip linking if the reference is just a passing mention or minor detail
+
+## Next Steps
+Use this context when generating your new entry content. Reference and link to existing entries where appropriate to create an interconnected world."""
+    
+    return prompt
+
+
+def _create_description_generation_prompt(entries: List[Dict[str, str]]) -> str:
+    """Create a prompt for the client LLM to generate entry descriptions."""
+    prompt = """# Entry Description Generation
+
+## Task
+Generate concise descriptions (100 words or less) for the following worldbuilding entries. These descriptions will be used as YAML frontmatter to help provide context when generating new entries.
+
+## Guidelines
+- Keep descriptions to 100 words maximum
+- Focus on the most essential and distinctive aspects
+- Write in a clear, engaging style that captures the essence
+- Avoid redundant information already obvious from the title
+- Make descriptions useful for someone who needs quick context
+
+## Entries Needing Descriptions
+
+"""
+    
+    for entry in entries:
+        prompt += f"""### {entry['name']} ({entry['taxonomy']})
+**File**: {entry['file_path']}
+
+**Content Preview**:
+{entry['content']}
+
+**Suggested Description**: [Your 100-word description here]
+
+---
+
+"""
+    
+    prompt += """## Response Format
+For each entry, provide a description in this format:
+
+**{Entry Name}**: [Your concise description]
+
+## Instructions
+Please analyze the content previews above and generate appropriate descriptions for each entry."""
+    
+    return prompt
+
+
 def _create_stub_summary_response(created_stubs: List[Dict[str, str]], created_taxonomies: List[str]) -> list[types.TextContent]:
     """Create the summary response for stub creation."""
     summary_parts = []
@@ -593,6 +1040,9 @@ ENTRY_HANDLERS = {
     "create_world_entry": create_world_entry,
     "identify_stub_candidates": identify_stub_candidates,
     "create_stub_entries": create_stub_entries,
+    "add_frontmatter_to_entries": add_frontmatter_to_entries,
+    "generate_entry_descriptions": generate_entry_descriptions,
+    "apply_entry_descriptions": apply_entry_descriptions,
 }
 
 

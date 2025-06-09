@@ -242,6 +242,93 @@ def generate_content_summary(content: str, max_length: int = 150) -> str:
     return summary
 
 
+def add_frontmatter_to_content(content: str, frontmatter: Dict[str, str]) -> str:
+    """Add YAML frontmatter to markdown content.
+    
+    Args:
+        content: Existing markdown content
+        frontmatter: Dictionary of frontmatter key-value pairs
+        
+    Returns:
+        Content with frontmatter prepended
+    """
+    # Check if content already has frontmatter
+    existing_frontmatter, main_content = extract_frontmatter(content)
+    
+    # Merge frontmatter, with new values taking precedence
+    merged_frontmatter = {**existing_frontmatter, **frontmatter}
+    
+    # Build frontmatter block
+    frontmatter_lines = ["---"]
+    for key, value in merged_frontmatter.items():
+        # Properly escape YAML values
+        if isinstance(value, str):
+            # Check if value needs quoting (contains special YAML characters)
+            needs_quoting = any(char in value for char in ['"', "'", ':', '\n', '\r', '\t', '#', '&', '*', '!', '|', '>', '%', '@', '`', '[', ']', '{', '}'])
+            
+            if needs_quoting or value.strip() != value:  # Also quote if has leading/trailing whitespace
+                # Use double quotes and escape internal double quotes
+                escaped_value = value.replace('\\', '\\\\').replace('"', '\\"')
+                frontmatter_lines.append(f'{key}: "{escaped_value}"')
+            else:
+                frontmatter_lines.append(f"{key}: {value}")
+        else:
+            frontmatter_lines.append(f"{key}: {value}")
+    frontmatter_lines.append("---")
+    
+    # Combine frontmatter with content
+    return "\n".join(frontmatter_lines) + "\n\n" + main_content
+
+
+def extract_description_from_content(content: str, max_words: int = 100) -> str:
+    """Extract a description from content for frontmatter.
+    
+    Args:
+        content: Markdown content
+        max_words: Maximum words in description
+        
+    Returns:
+        Concise description suitable for frontmatter
+    """
+    # Remove existing frontmatter
+    _, main_content = extract_frontmatter(content)
+    
+    # Look for overview section first
+    overview = extract_section_content(main_content, "Overview")
+    if overview:
+        text = overview
+    else:
+        # Use content after the title
+        lines = main_content.split('\n')
+        content_lines = []
+        
+        for line in lines[1:]:  # Skip title
+            stripped = line.strip()
+            if stripped and not stripped.startswith('#'):
+                content_lines.append(stripped)
+            elif content_lines:  # Stop at next header if we have content
+                break
+        
+        text = " ".join(content_lines)
+    
+    # Clean up markdown formatting
+    text = re.sub(r'\*\*(.*?)\*\*', r'\1', text)  # Bold
+    text = re.sub(r'\*(.*?)\*', r'\1', text)      # Italic
+    text = re.sub(r'`(.*?)`', r'\1', text)        # Code
+    text = re.sub(r'\[(.*?)\]\(.*?\)', r'\1', text)  # Links
+    text = re.sub(r'#{1,6}\s*', '', text)         # Headers
+    
+    # Get first N words
+    words = text.split()
+    if len(words) > max_words:
+        words = words[:max_words]
+        description = " ".join(words) + "..."
+    else:
+        description = " ".join(words)
+    
+    return description.strip()
+
+
 def validate_markdown_structure(content: str) -> Dict[str, bool]:
     """Validate the structure of markdown content.
     
