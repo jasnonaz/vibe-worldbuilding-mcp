@@ -63,15 +63,17 @@ async def instantiate_world(arguments: dict[str, Any] | None) -> list[types.Text
         readme_file = _create_world_readme(world_path, world_name, taxonomies)
         created_folders.append(str(readme_file.relative_to(Path(base_directory))))
         
-        # Generate overview images if FAL API is available
+        # Generate overview images and favicon if FAL API is available
         image_generation_info = ""
+        favicon_info = ""
         if FAL_API_KEY and FAL_AVAILABLE:
             image_generation_info = await _generate_overview_images(world_path, world_name, world_content)
+            favicon_info = await _generate_world_favicon(world_path, world_name, world_content)
         
         # Create success response
         return _create_success_response(
             world_name, world_path.name, world_path, created_folders, 
-            taxonomies, image_generation_info
+            taxonomies, image_generation_info + favicon_info
         )
         
     except Exception as e:
@@ -294,6 +296,79 @@ async def _generate_single_image(headers: dict, prompt: str, aspect_ratio: str, 
         pass  # Silently fail for individual images
     
     return False
+
+
+async def _generate_world_favicon(world_path: Path, world_name: str, world_content: str) -> str:
+    """Generate a custom favicon for the world using FAL API.
+    
+    Args:
+        world_path: Path to the world directory
+        world_name: Name of the world
+        world_content: Content of the world overview
+        
+    Returns:
+        Information string about favicon generation
+    """
+    if not FAL_AVAILABLE:
+        return ""
+    
+    try:
+        headers = {
+            "Authorization": f"Key {FAL_API_KEY}",
+            "Content-Type": "application/json"
+        }
+        
+        # Create favicon-specific prompt
+        favicon_prompt = _create_favicon_prompt(world_name, world_content)
+        
+        # Generate SVG-style favicon (we'll save as PNG for compatibility)
+        payload = {
+            "prompt": favicon_prompt,
+            "aspect_ratio": "1:1",
+            "num_images": 1
+        }
+        
+        response = requests.post(FAL_API_URL, headers=headers, json=payload)
+        
+        if response.status_code == 200:
+            result = response.json()
+            if "images" in result and result["images"]:
+                image_url = result["images"][0]["url"]
+                image_response = requests.get(image_url)
+                if image_response.status_code == 200:
+                    # Save favicon in the images directory
+                    favicon_path = world_path / "images" / "favicon.png"
+                    with open(favicon_path, 'wb') as f:
+                        f.write(image_response.content)
+                    
+                    return "\n- Generated custom favicon: favicon.png"
+                    
+    except Exception as e:
+        return f"\n\nNote: Favicon generation attempted but failed: {str(e)}"
+    
+    return ""
+
+
+def _create_favicon_prompt(world_name: str, world_content: str) -> str:
+    """Create a favicon prompt based on world content.
+    
+    Args:
+        world_name: Name of the world
+        world_content: Content to analyze for themes
+        
+    Returns:
+        Generated prompt for favicon image
+    """
+    # Get first 200 characters of world content for context
+    world_summary = world_content[:200].strip()
+    
+    return (
+        f"Simple iconic favicon design for '{world_name}'. "
+        f"World description: {world_summary}. "
+        f"Create a minimalist icon that captures the essence of this world. "
+        f"Style: clean, simple, recognizable at 16x16 pixels, high contrast, "
+        f"professional website favicon, vector-style illustration"
+    )
 
 
 def _create_success_response(
