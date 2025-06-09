@@ -238,7 +238,7 @@ def _setup_content_symlinks(script_dir: Path, world_path: Path) -> None:
 
 
 def _setup_public_images(script_dir: Path, world_path: Path, world_name: str) -> None:
-    """Copy images to the public directory for the build.
+    """Copy images and favicon to the public directory for the build.
     
     Args:
         script_dir: Path to the project root directory
@@ -255,6 +255,12 @@ def _setup_public_images(script_dir: Path, world_path: Path, world_name: str) ->
         
         # Copy images to public directory
         shutil.copytree(world_images_path, public_images_path)
+        
+        # Copy favicon to public root if it exists
+        favicon_source = world_images_path / "favicon.png"
+        if favicon_source.exists():
+            favicon_dest = script_dir / "public" / "favicon.png"
+            shutil.copy2(favicon_source, favicon_dest)
 
 
 def _handle_successful_build(script_dir: Path, world_path: Path, world_name: str, site_dir: str) -> list[types.TextContent]:

@@ -1,8 +1,8 @@
 {
   "mcpServers": {
     "vibe-worldbuilding": {
-      "command": "/path/to/your/python3",
-      "args": ["/path/to/vibe-worldbuilder/vibe_worldbuilding_server.py"],
+      "command": "python3",
+      "args": ["./vibe_worldbuilding_server.py"],
       "env": {
         "FAL_KEY": "your_fal_api_key_here"
       }

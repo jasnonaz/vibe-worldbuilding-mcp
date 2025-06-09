@@ -7,60 +7,10 @@ organized by functional category for easy maintenance and testing.
 import mcp.types as types
 
 
-# Content Management Tools
-SAVE_WORLD_CONTENT_SCHEMA = types.Tool(
-    name="save_world_content",
-    description="Save worldbuilding content to a markdown file",
-    inputSchema={
-        "type": "object",
-        "properties": {
-            "filename": {
-                "type": "string",
-                "description": "Name of the file to save (without .md extension)"
-            },
-            "content": {
-                "type": "string",
-                "description": "Markdown content to save"
-            },
-            "directory": {
-                "type": "string",
-                "description": "Directory to save in (default: current directory)",
-                "default": "."
-            }
-        },
-        "required": ["filename", "content"]
-    }
-)
-
-READ_WORLD_CONTENT_SCHEMA = types.Tool(
-    name="read_world_content",
-    description="Read existing worldbuilding content from a markdown file",
-    inputSchema={
-        "type": "object",
-        "properties": {
-            "filepath": {
-                "type": "string",
-                "description": "Path to the markdown file to read"
-            }
-        },
-        "required": ["filepath"]
-    }
-)
-
-LIST_WORLD_FILES_SCHEMA = types.Tool(
-    name="list_world_files",
-    description="List all worldbuilding files in a directory",
-    inputSchema={
-        "type": "object",
-        "properties": {
-            "directory": {
-                "type": "string",
-                "description": "Directory to list files from (default: current directory)",
-                "default": "."
-            }
-        }
-    }
-)
+# Content Management Tools - REMOVED
+# These tools (save_world_content, read_world_content, list_world_files) were redundant 
+# with Claude Code's built-in Write, Read, and LS/Glob tools.
+# Use the built-in file operations instead for better functionality and consistency.
 
 
 # World Creation Tools
@@ -109,28 +59,9 @@ INSTANTIATE_WORLD_SCHEMA = types.Tool(
 
 
 # Taxonomy Tools
-GENERATE_TAXONOMY_GUIDELINES_SCHEMA = types.Tool(
-    name="generate_taxonomy_guidelines",
-    description="Generate structured entry guidelines for a specific taxonomy type",
-    inputSchema={
-        "type": "object",
-        "properties": {
-            "taxonomy_name": {
-                "type": "string",
-                "description": "Name of the taxonomy to create guidelines for"
-            },
-            "taxonomy_description": {
-                "type": "string",
-                "description": "Description of how this taxonomy applies to the world"
-            }
-        },
-        "required": ["taxonomy_name", "taxonomy_description"]
-    }
-)
-
-CREATE_TAXONOMY_FOLDERS_SCHEMA = types.Tool(
-    name="create_taxonomy_folders",
-    description="Create a single taxonomy with custom guidelines for a world project",
+CREATE_TAXONOMY_SCHEMA = types.Tool(
+    name="create_taxonomy",
+    description="Create a taxonomy with LLM-generated guidelines. Call without custom_guidelines to get LLM prompt for guideline generation, then call again with guidelines to create the taxonomy.",
     inputSchema={
         "type": "object",
         "properties": {
@@ -148,10 +79,11 @@ CREATE_TAXONOMY_FOLDERS_SCHEMA = types.Tool(
             },
             "custom_guidelines": {
                 "type": "string",
-                "description": "Custom entry structure guidelines for this taxonomy"
+                "description": "Custom entry structure guidelines for this taxonomy (optional - omit to get LLM prompt for guideline generation)",
+                "default": ""
             }
         },
-        "required": ["world_directory", "taxonomy_name", "taxonomy_description", "custom_guidelines"]
+        "required": ["world_directory", "taxonomy_name", "taxonomy_description"]
     }
 )
 
@@ -185,32 +117,8 @@ CREATE_WORLD_ENTRY_SCHEMA = types.Tool(
     }
 )
 
-IDENTIFY_STUB_CANDIDATES_SCHEMA = types.Tool(
-    name="identify_stub_candidates",
-    description="Analyze entry content and present it to client LLM for stub candidate identification",
-    inputSchema={
-        "type": "object",
-        "properties": {
-            "world_directory": {
-                "type": "string",
-                "description": "Path to the world directory"
-            },
-            "entry_content": {
-                "type": "string",
-                "description": "The markdown content of the entry to analyze for stub candidates"
-            },
-            "entry_name": {
-                "type": "string",
-                "description": "Name of the entry being analyzed"
-            },
-            "taxonomy": {
-                "type": "string",
-                "description": "Taxonomy the entry belongs to"
-            }
-        },
-        "required": ["world_directory", "entry_content", "entry_name", "taxonomy"]
-    }
-)
+# IDENTIFY_STUB_CANDIDATES_SCHEMA - REMOVED
+# This tool was redundant - stub analysis is already built into create_world_entry
 
 CREATE_STUB_ENTRIES_SCHEMA = types.Tool(
     name="create_stub_entries",
@@ -241,20 +149,9 @@ CREATE_STUB_ENTRIES_SCHEMA = types.Tool(
     }
 )
 
-ADD_FRONTMATTER_TO_ENTRIES_SCHEMA = types.Tool(
-    name="add_frontmatter_to_entries",
-    description="Add YAML frontmatter with descriptions to existing entries",
-    inputSchema={
-        "type": "object",
-        "properties": {
-            "world_directory": {
-                "type": "string",
-                "description": "Path to the world directory"
-            }
-        },
-        "required": ["world_directory"]
-    }
-)
+# ADD_FRONTMATTER_TO_ENTRIES_SCHEMA - REMOVED  
+# This tool conflicted with LLM-first design principles.
+# Use generate_entry_descriptions + apply_entry_descriptions workflow instead.
 
 GENERATE_ENTRY_DESCRIPTIONS_SCHEMA = types.Tool(
     name="generate_entry_descriptions",
@@ -271,8 +168,8 @@ GENERATE_ENTRY_DESCRIPTIONS_SCHEMA = types.Tool(
     }
 )
 
-APPLY_ENTRY_DESCRIPTIONS_SCHEMA = types.Tool(
-    name="apply_entry_descriptions",
+ADD_ENTRY_FRONTMATTER_SCHEMA = types.Tool(
+    name="add_entry_frontmatter",
     description="Apply generated descriptions to entry frontmatter",
     inputSchema={
         "type": "object",
@@ -358,28 +255,20 @@ BUILD_STATIC_SITE_SCHEMA = types.Tool(
 
 
 # Organized tool collections for easy access
-CONTENT_TOOLS = [
-    SAVE_WORLD_CONTENT_SCHEMA,
-    READ_WORLD_CONTENT_SCHEMA,
-    LIST_WORLD_FILES_SCHEMA,
-]
 
 WORLD_TOOLS = [
     INSTANTIATE_WORLD_SCHEMA,
 ]
 
 TAXONOMY_TOOLS = [
-    GENERATE_TAXONOMY_GUIDELINES_SCHEMA,
-    CREATE_TAXONOMY_FOLDERS_SCHEMA,
+    CREATE_TAXONOMY_SCHEMA,
 ]
 
 ENTRY_TOOLS = [
     CREATE_WORLD_ENTRY_SCHEMA,
-    IDENTIFY_STUB_CANDIDATES_SCHEMA,
     CREATE_STUB_ENTRIES_SCHEMA,
-    ADD_FRONTMATTER_TO_ENTRIES_SCHEMA,
     GENERATE_ENTRY_DESCRIPTIONS_SCHEMA,
-    APPLY_ENTRY_DESCRIPTIONS_SCHEMA,
+    ADD_ENTRY_FRONTMATTER_SCHEMA,
 ]
 
 IMAGE_TOOLS = [
@@ -391,7 +280,7 @@ SITE_TOOLS = [
 ]
 
 # Complete tool list
-ALL_TOOLS = CONTENT_TOOLS + WORLD_TOOLS + TAXONOMY_TOOLS + ENTRY_TOOLS + SITE_TOOLS
+ALL_TOOLS = WORLD_TOOLS + TAXONOMY_TOOLS + ENTRY_TOOLS + SITE_TOOLS
 
 
 def get_all_tools(include_fal_tools: bool = False) -> list[types.Tool]:
@@ -422,7 +311,6 @@ def get_tools_by_category(category: str) -> list[types.Tool]:
         ValueError: If category is not recognized
     """
     category_map = {
-        "content": CONTENT_TOOLS,
         "world": WORLD_TOOLS,
         "taxonomy": TAXONOMY_TOOLS,
         "entry": ENTRY_TOOLS,

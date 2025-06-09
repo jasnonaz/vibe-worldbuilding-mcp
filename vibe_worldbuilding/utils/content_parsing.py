@@ -255,8 +255,11 @@ def add_frontmatter_to_content(content: str, frontmatter: Dict[str, str]) -> str
     # Check if content already has frontmatter
     existing_frontmatter, main_content = extract_frontmatter(content)
     
+    # Filter out None values and empty strings to avoid null in YAML
+    filtered_frontmatter = {k: v for k, v in frontmatter.items() if v is not None and v != ""}
+    
     # Merge frontmatter, with new values taking precedence
-    merged_frontmatter = {**existing_frontmatter, **frontmatter}
+    merged_frontmatter = {**existing_frontmatter, **filtered_frontmatter}
     
     # Build frontmatter block
     frontmatter_lines = ["---"]

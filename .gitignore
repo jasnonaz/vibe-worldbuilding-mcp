@@ -101,3 +101,9 @@ dist/
 
 # Generated sites (optional - comment out if you want to commit example sites)
 # example-worlds/*/site/
+
+# Test environments - never commit test artifacts
+test-worlds/*/
+!test-worlds/README.md
+tests/test-worlds/*/
+!tests/test-worlds/README.md

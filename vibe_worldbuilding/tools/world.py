@@ -63,15 +63,17 @@ async def instantiate_world(arguments: dict[str, Any] | None) -> list[types.Text
         readme_file = _create_world_readme(world_path, world_name, taxonomies)
         created_folders.append(str(readme_file.relative_to(Path(base_directory))))
         
-        # Generate overview images if FAL API is available
+        # Generate overview images and favicon if FAL API is available
         image_generation_info = ""
+        favicon_info = ""
         if FAL_API_KEY and FAL_AVAILABLE:
             image_generation_info = await _generate_overview_images(world_path, world_name, world_content)
+            favicon_info = await _generate_world_favicon(world_path, world_name, world_content)
         
         # Create success response
         return _create_success_response(
             world_name, world_path.name, world_path, created_folders, 
-            taxonomies, image_generation_info
+            taxonomies, image_generation_info + favicon_info
         )
         
     except Exception as e:
@@ -206,26 +208,26 @@ async def _generate_overview_images(world_path: Path, world_name: str, world_con
             {
                 "name": "header",
                 "prompt": _create_header_prompt(world_name, world_content),
-                "aspect_ratio": "16:9",
+                "image_size": "landscape_16_9",
                 "filename": f"world-overview-header{IMAGE_EXTENSION}"
             },
             {
                 "name": "atmosphere",
                 "prompt": f"Atmospheric detail from {world_name}, focusing on mood and environment, detailed fantasy illustration",
-                "aspect_ratio": "1:1",
+                "image_size": "square_hd",
                 "filename": f"world-overview-atmosphere{IMAGE_EXTENSION}"
             },
             {
                 "name": "concept",
                 "prompt": f"Key concept visualization from {world_name}, detailed fantasy illustration",
-                "aspect_ratio": "1:1",
+                "image_size": "square_hd",
                 "filename": f"world-overview-concept{IMAGE_EXTENSION}"
             }
         ]
         
         for config in image_configs:
             success = await _generate_single_image(
-                headers, config["prompt"], config["aspect_ratio"],
+                headers, config["prompt"], config["image_size"],
                 world_path / "images" / config["filename"]
             )
             if success:
@@ -260,13 +262,13 @@ def _create_header_prompt(world_name: str, world_content: str) -> str:
         return f"{base_prompt}, cinematic digital art"
 
 
-async def _generate_single_image(headers: dict, prompt: str, aspect_ratio: str, output_path: Path) -> bool:
+async def _generate_single_image(headers: dict, prompt: str, image_size: str, output_path: Path) -> bool:
     """Generate a single image using the FAL API.
     
     Args:
         headers: HTTP headers for the API request
         prompt: Image generation prompt
-        aspect_ratio: Desired aspect ratio
+        image_size: FAL API image size parameter
         output_path: Where to save the generated image
         
     Returns:
@@ -275,8 +277,11 @@ async def _generate_single_image(headers: dict, prompt: str, aspect_ratio: str, 
     try:
         payload = {
             "prompt": prompt,
-            "aspect_ratio": aspect_ratio,
-            "num_images": 1
+            "image_size": image_size,
+            "num_images": 1,
+            "num_inference_steps": 28,
+            "guidance_scale": 3.5,
+            "enable_safety_checker": True
         }
         
         response = requests.post(FAL_API_URL, headers=headers, json=payload)
@@ -294,6 +299,89 @@ async def _generate_single_image(headers: dict, prompt: str, aspect_ratio: str, 
         pass  # Silently fail for individual images
     
     return False
+
+
+async def _generate_world_favicon(world_path: Path, world_name: str, world_content: str) -> str:
+    """Generate a custom favicon for the world using FAL API.
+    
+    Args:
+        world_path: Path to the world directory
+        world_name: Name of the world
+        world_content: Content of the world overview
+        
+    Returns:
+        Information string about favicon generation
+    """
+    if not FAL_AVAILABLE:
+        return ""
+    
+    try:
+        headers = {
+            "Authorization": f"Key {FAL_API_KEY}",
+            "Content-Type": "application/json"
+        }
+        
+        # Create favicon-specific prompt
+        favicon_prompt = _create_favicon_prompt(world_name, world_content)
+        
+        # Generate favicon with proper size constraints
+        payload = {
+            "prompt": favicon_prompt,
+            "image_size": "square_hd",  # 1024x1024 square format
+            "num_images": 1,
+            "num_inference_steps": 28,
+            "guidance_scale": 3.5,
+            "enable_safety_checker": True
+        }
+        
+        response = requests.post(FAL_API_URL, headers=headers, json=payload)
+        
+        if response.status_code == 200:
+            result = response.json()
+            if "images" in result and result["images"]:
+                image_url = result["images"][0]["url"]
+                image_response = requests.get(image_url)
+                if image_response.status_code == 200:
+                    # Save favicon in the images directory
+                    favicon_path = world_path / "images" / "favicon.png"
+                    with open(favicon_path, 'wb') as f:
+                        f.write(image_response.content)
+                    
+                    return "\n- Generated custom favicon: favicon.png"
+                else:
+                    return f"\n\nNote: Favicon image download failed: HTTP {image_response.status_code}"
+            else:
+                return f"\n\nNote: Favicon generation failed: No images in API response"
+        else:
+            return f"\n\nNote: Favicon generation failed: API returned HTTP {response.status_code} - {response.text[:200]}"
+                    
+    except Exception as e:
+        return f"\n\nNote: Favicon generation attempted but failed: {str(e)}"
+    
+    return "\n\nNote: Favicon generation failed: Unknown error"
+
+
+def _create_favicon_prompt(world_name: str, world_content: str) -> str:
+    """Create a favicon prompt based on world content.
+    
+    Args:
+        world_name: Name of the world
+        world_content: Content to analyze for themes
+        
+    Returns:
+        Generated prompt for favicon image
+    """
+    # Get first 200 characters of world content for context
+    world_summary = world_content[:200].strip()
+    
+    return (
+        f"Simple geometric icon symbol for '{world_name}' world. "
+        f"Context: {world_summary}. "
+        f"REQUIREMENTS: NO TEXT, pure symbol only, minimalist geometric design, "
+        f"single central icon, high contrast silhouette, simple shapes, "
+        f"recognizable at tiny sizes, solid colors only, favicon style, "
+        f"professional web icon, vector-like flat design"
+    )
 
 
 def _create_success_response(

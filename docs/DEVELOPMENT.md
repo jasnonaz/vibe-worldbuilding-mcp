@@ -1,13 +1,5 @@
 # Claude Development Guidelines
 
-## Claude Code File Location Requirements
-
-Claude Code expects this CLAUDE.md file at the project root for automatic discovery:
-- Claude reads CLAUDE.md files recursively from the current working directory up to root
-- Project-specific guidelines should be in the root CLAUDE.md and committed to source control
-- This enables consistent development practices across team members and sessions
-- The file is automatically loaded when Claude Code runs in this project directory
-
 ## Project Scope
 **This project builds the worldbuilding MCP server and tools - NOT individual worlds**:
 - We develop the MCP server that enables worldbuilding
@@ -70,13 +62,6 @@ vibe_worldbuilding/
 - System creates minimal 1-2 sentence stub entries for new entities
 - Integrated into `create_world_entry` workflow
 
-### Modular Architecture (Phase 2 Complete)
-- **entries/creation.py** (234 lines): Entry creation with context integration
-- **entries/stub_generation.py** (289 lines): Auto-stub analysis and creation  
-- **entries/content_processing.py** (293 lines): Batch description operations
-- **entries/utilities.py** (204 lines): Shared helper functions
-- **tools/entries.py**: Clean router pattern for backward compatibility
-
 ## Development Workflow
 
 ### Adding New Features
@@ -86,22 +71,26 @@ vibe_worldbuilding/
 4. **Integration**: Connect to main server with minimal coupling
 5. **Testing**: Verify functionality works end-to-end
 
-### Code Quality Standards
-- **ALWAYS run tests before committing**: Use `python tests/test_e2e_simple.py` or comprehensive tests
-- Run `python scripts/lint.py` before committing
-- Follow the 200-500 line module size guideline
-- Maintain backward compatibility for MCP tool signatures
-- Use comprehensive integration tests in `tests/` directory
-- Document architectural decisions in `docs/ARCHITECTURE.md`
+### Testing and Validation
+When testing worldbuilding features or making changes that affect the static site:
+1. **Always rebuild the site** after making changes using `build_static_site`
+2. **Verify the site serves correctly** - test that changes appear in the generated HTML
+3. **Check crosslinks work** - ensure markdown links are converted to functional HTML anchors
+4. **Test navigation** - confirm taxonomies and entries are properly linked in the site structure
 
-## Testing Infrastructure
-- **Comprehensive E2E tests**: Full worldbuilding pipeline validation
-- **Integration tests**: MCP tool workflow verification
-- **Test isolation**: Automated cleanup of test worlds
-- **CI/CD ready**: Structured test suite in `tests/` directory
+This ensures all features work end-to-end in the actual user experience, not just in the development tools.
 
-## Important Instruction Reminders
-- Do what has been asked; nothing more, nothing less
-- NEVER create files unless they're absolutely necessary for achieving your goal
-- ALWAYS prefer editing an existing file to creating a new one
-- NEVER proactively create documentation files (*.md) or README files unless explicitly requested
+### Testing Guidelines
+**NEVER edit example worlds directly**:
+- Example worlds are reference implementations that should remain stable
+- Use example worlds for read-only testing and verification
+- When testing modifications, create temporary test worlds or use dedicated test data
+- If example world updates are needed, modify the world generation code, not the files directly
+
+### Tool Design Guidelines
+**Prefer extending existing tools over creating new ones**:
+- Before creating a new tool, consider if functionality can be added to an existing tool
+- Use optional parameters and intelligent branching within tools to handle multiple use cases
+- Keep the tool surface area minimal to reduce complexity for users
+- New tools should only be created when the functionality is genuinely distinct and cannot be reasonably integrated
+- When in doubt, extend an existing tool rather than create a new one
