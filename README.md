@@ -275,6 +275,91 @@ Each world gets its own unique folder named: `{world-name}-{unique-suffix}`
 - **Permission errors**: Ensure you have write permissions in your working directory
 - **Path issues**: Use absolute paths or ensure your working directory is correct
 
+## Testing
+
+The vibe-worldbuilding system includes a comprehensive test suite to ensure all components work correctly together.
+
+### Test Structure
+
+The testing framework uses isolated test worlds to validate the complete worldbuilding pipeline:
+
+```
+test-worlds/           # Isolated test environments (git-ignored)
+├── unit/             # Unit test worlds for specific features
+├── integration/      # End-to-end integration test worlds
+└── performance/      # Performance and load test worlds
+```
+
+### Running Tests
+
+**Quick Integration Test:**
+```bash
+python test_e2e_simple.py --verbose --cleanup
+```
+
+**Full Test Suite:**
+```bash
+python test_e2e_integration.py --verbose --cleanup
+```
+
+**Test Options:**
+- `--verbose`: Show detailed test output
+- `--cleanup`: Remove test worlds after completion
+- `--base-dir ./test-worlds`: Specify test directory (default: current directory)
+
+### Test Coverage
+
+The test suite validates:
+
+1. **World Creation**: Project instantiation with proper directory structure
+2. **Taxonomy Management**: Creating taxonomies with custom guidelines
+3. **Entry Creation**: Content creation with auto-stub generation
+4. **Image Generation**: Visual content creation (requires FAL API key)
+5. **Site Building**: Static website generation with gallery functionality
+6. **Content Validation**: Verifying generated content structure and links
+7. **File Organization**: Ensuring proper file placement and naming
+8. **Error Handling**: Testing failure scenarios and recovery
+
+### Test Environments
+
+Tests run in isolated `test-worlds/` directories that:
+- Don't interfere with real worldbuilding projects
+- Can be safely created and destroyed
+- Use deterministic naming for consistency
+- Support parallel test execution
+
+### Test Data
+
+Test worlds use predefined fantasy content to ensure:
+- Consistent test results across runs
+- Comprehensive feature coverage
+- Realistic usage patterns
+- Edge case validation
+
+### Performance Testing
+
+Integration tests include timing measurements to detect:
+- Performance regressions
+- Resource usage patterns
+- Bottlenecks in the pipeline
+- API rate limiting issues
+
+### Adding New Tests
+
+When adding new features:
+1. Add unit tests for individual components
+2. Update integration tests for end-to-end validation
+3. Include error case testing
+4. Document test data requirements
+5. Update test coverage metrics
+
+### Test Configuration
+
+Tests respect environment variables:
+- `FAL_KEY`: For image generation testing
+- `TEST_TIMEOUT`: Maximum test duration (default: 300s)
+- `TEST_CLEANUP`: Auto-cleanup test worlds (default: true)
+
 ## License
 
 MIT License - see LICENSE file for details
@@ -282,3 +367,11 @@ MIT License - see LICENSE file for details
 ## Contributing
 
 Contributions welcome! Please feel free to submit issues and enhancement requests.
+
+### Development Workflow
+
+1. **Fork and clone** the repository
+2. **Create test worlds** in `test-worlds/` for development
+3. **Run the test suite** to ensure existing functionality works
+4. **Add tests** for new features or bug fixes
+5. **Submit a pull request** with test results
