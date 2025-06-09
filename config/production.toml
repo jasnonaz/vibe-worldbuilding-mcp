@@ -1,0 +1,30 @@
+# Production Environment Configuration
+# This file contains production-specific settings
+
+[server]
+host = "0.0.0.0"
+port = 8080
+debug = false
+
+[features]
+image_generation_enabled = true
+auto_stub_generation_enabled = true
+verbose_logging = false
+
+[paths]
+worlds_directory = "/app/worlds"
+templates_directory = "/app/templates"
+
+[external_apis]
+# FAL API configuration
+fal_api_url = "https://fal.run/fal-ai/imagen4/preview"
+fal_api_timeout = 120  # seconds - longer timeout for production
+
+[build]
+timeout_seconds = 600  # 10 minutes for large worlds
+site_directory = "site"
+
+[monitoring]
+metrics_enabled = true
+log_level = "INFO"
+error_reporting_enabled = true

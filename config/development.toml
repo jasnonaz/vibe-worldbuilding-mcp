@@ -1,0 +1,31 @@
+# Development Environment Configuration
+# This file contains development-specific settings
+
+[server]
+host = "localhost"
+port = 8080
+debug = true
+
+[features]
+image_generation_enabled = true
+auto_stub_generation_enabled = true
+verbose_logging = true
+
+[paths]
+worlds_directory = "./worlds"
+templates_directory = "./templates"
+test_worlds_directory = "./test-worlds"
+
+[external_apis]
+# FAL API configuration
+fal_api_url = "https://fal.run/fal-ai/imagen4/preview"
+fal_api_timeout = 60  # seconds
+
+[build]
+timeout_seconds = 300
+site_directory = "site"
+
+[development]
+auto_reload = true
+hot_reload = true
+show_debug_info = true
