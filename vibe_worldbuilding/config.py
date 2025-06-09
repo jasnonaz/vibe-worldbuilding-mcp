@@ -1,6 +1,18 @@
 """Configuration and constants for the Vibe Worldbuilding MCP."""
 
 import os
+from pathlib import Path
+
+# Load environment variables from .env file
+try:
+    from dotenv import load_dotenv
+    # Look for .env in the project root
+    env_path = Path(__file__).parent.parent / ".env"
+    if env_path.exists():
+        load_dotenv(env_path)
+except ImportError:
+    # dotenv not available, just use system environment
+    pass
 
 # Version information
 VERSION = "1.0.0"

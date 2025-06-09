@@ -72,12 +72,13 @@ class TestSuiteRunner:
         self.log("Running integration tests...")
         
         try:
-            # Run the simple E2E test
+            # Run the comprehensive E2E test
             cmd = [
-                sys.executable, "test_e2e_simple.py",
+                sys.executable, "tests/test_e2e_comprehensive.py",
                 "--base-dir", str(self.test_dir / "integration"),
                 "--verbose" if self.verbose else "",
-                "--cleanup" if self.cleanup else ""
+                "--cleanup" if self.cleanup else "",
+                "--skip-images"  # Skip images in automated tests
             ]
             
             # Filter out empty strings

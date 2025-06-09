@@ -284,7 +284,12 @@ The vibe-worldbuilding system includes a comprehensive test suite to ensure all 
 The testing framework uses isolated test worlds to validate the complete worldbuilding pipeline:
 
 ```
-test-worlds/           # Isolated test environments (git-ignored)
+tests/                # Test suite code
+├── run_tests.py      # Unified test runner
+├── test_e2e_simple.py       # Simple integration test  
+└── test_e2e_integration.py  # Full integration test
+
+test-worlds/          # Isolated test environments (git-ignored)
 ├── unit/             # Unit test worlds for specific features
 ├── integration/      # End-to-end integration test worlds
 └── performance/      # Performance and load test worlds
@@ -292,14 +297,30 @@ test-worlds/           # Isolated test environments (git-ignored)
 
 ### Running Tests
 
-**Quick Integration Test:**
+**Unified Test Runner:**
 ```bash
-python test_e2e_simple.py --verbose --cleanup
+# Run all tests
+python tests/run_tests.py
+
+# Run specific test type
+python tests/run_tests.py integration --verbose
+python tests/run_tests.py unit --verbose  
+python tests/run_tests.py performance --verbose
+
+# Keep test worlds for inspection
+python tests/run_tests.py integration --no-cleanup --verbose
 ```
 
-**Full Test Suite:**
+**Individual Tests:**
 ```bash
-python test_e2e_integration.py --verbose --cleanup
+# Simple test (basic functionality)
+python tests/test_e2e_simple.py --verbose --cleanup
+
+# Comprehensive test (complete world creation)  
+python tests/test_e2e_comprehensive.py --verbose --skip-images
+
+# Full integration test (all features)
+python tests/test_e2e_integration.py --verbose --cleanup
 ```
 
 **Test Options:**
