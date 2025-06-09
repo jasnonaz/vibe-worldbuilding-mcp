@@ -4,29 +4,24 @@ This package handles the creation of detailed world entries, automatic stub gene
 and content analysis. It's organized into focused modules for better maintainability.
 
 Public API:
-    - create_world_entry: Main entry creation function
-    - identify_stub_candidates: Auto-stub analysis  
-    - create_stub_entries: Stub creation
-    - generate_entry_descriptions: Batch description generation
-    - add_frontmatter_to_entries: Add metadata to entries
-    - apply_entry_descriptions: Apply generated descriptions
+    - create_world_entry: Main entry creation function with integrated stub analysis
+    - create_stub_entries: Stub creation from LLM analysis
+    - generate_entry_descriptions: LLM-driven batch description generation
+    - add_entry_frontmatter: Apply LLM-generated descriptions to entry files
 """
 
 # Import public API functions
 from .creation import create_world_entry
-from .stub_generation import identify_stub_candidates, create_stub_entries
+from .stub_generation import create_stub_entries
 from .content_processing import (
     generate_entry_descriptions,
-    add_frontmatter_to_entries, 
-    apply_entry_descriptions
+    add_entry_frontmatter
 )
 
 # Re-export for backward compatibility with existing tools/entries.py interface
 __all__ = [
     "create_world_entry",
-    "identify_stub_candidates", 
     "create_stub_entries",
     "generate_entry_descriptions",
-    "add_frontmatter_to_entries",
-    "apply_entry_descriptions"
+    "add_entry_frontmatter"
 ]

@@ -80,88 +80,11 @@ async def generate_entry_descriptions(arguments: dict[str, Any] | None) -> list[
         return [types.TextContent(type="text", text=f"Error analyzing entries for descriptions: {str(e)}")]
 
 
-async def add_frontmatter_to_entries(arguments: dict[str, Any] | None) -> list[types.TextContent]:
-    """Add YAML frontmatter with descriptions to existing entries.
-    
-    Processes all entry files in a world directory, extracting descriptions
-    from their content and adding them as YAML frontmatter. Useful for
-    retrofitting existing entries with metadata.
-    
-    Args:
-        arguments: Tool arguments containing world_directory
-        
-    Returns:
-        List containing summary of updated entries
-    """
-    if not arguments:
-        return [types.TextContent(type="text", text="Error: No arguments provided")]
-    
-    world_directory = arguments.get("world_directory", "")
-    
-    if not world_directory:
-        return [types.TextContent(type="text", text="Error: world_directory is required")]
-    
-    try:
-        world_path = Path(world_directory)
-        if not world_path.exists():
-            return [types.TextContent(type="text", text=f"Error: World directory {world_directory} does not exist")]
-        
-        entries_path = world_path / "entries"
-        if not entries_path.exists():
-            return [types.TextContent(type="text", text="No entries directory found")]
-        
-        updated_count = 0
-        skipped_count = 0
-        error_count = 0
-        
-        # Process all entry files
-        for taxonomy_dir in entries_path.iterdir():
-            if taxonomy_dir.is_dir():
-                for entry_file in taxonomy_dir.glob(f"*{MARKDOWN_EXTENSION}"):
-                    try:
-                        # Read existing content
-                        with open(entry_file, "r", encoding="utf-8") as f:
-                            content = f.read()
-                        
-                        # Check if already has frontmatter with description
-                        existing_frontmatter, _ = extract_frontmatter(content)
-                        if "description" in existing_frontmatter:
-                            skipped_count += 1
-                            continue
-                        
-                        # Extract description and add frontmatter
-                        description = extract_description_from_content(content)
-                        if description:
-                            updated_content = add_frontmatter_to_content(content, {
-                                "description": description
-                            })
-                            
-                            # Write updated content
-                            with open(entry_file, "w", encoding="utf-8") as f:
-                                f.write(updated_content)
-                            
-                            updated_count += 1
-                        else:
-                            skipped_count += 1
-                            
-                    except Exception as e:
-                        error_count += 1
-                        print(f"Error processing {entry_file}: {e}")
-        
-        # Create summary
-        summary = f"Frontmatter update completed:\n"
-        summary += f"- Updated: {updated_count} entries\n"
-        summary += f"- Skipped: {skipped_count} entries (already had description or no content)\n"
-        if error_count > 0:
-            summary += f"- Errors: {error_count} entries\n"
-        
-        return [types.TextContent(type="text", text=summary)]
-        
-    except Exception as e:
-        return [types.TextContent(type="text", text=f"Error adding frontmatter to entries: {str(e)}")]
+# add_frontmatter_to_entries function REMOVED
+# This conflicted with LLM-first design principles.
+# Use generate_entry_descriptions + add_entry_frontmatter workflow instead.
 
-
-async def apply_entry_descriptions(arguments: dict[str, Any] | None) -> list[types.TextContent]:
+async def add_entry_frontmatter(arguments: dict[str, Any] | None) -> list[types.TextContent]:
     """Apply generated descriptions to entry frontmatter.
     
     Takes a list of entry names and descriptions from the client LLM
@@ -248,7 +171,7 @@ async def apply_entry_descriptions(arguments: dict[str, Any] | None) -> list[typ
         return [types.TextContent(type="text", text=summary)]
         
     except Exception as e:
-        return [types.TextContent(type="text", text=f"Error applying entry descriptions: {str(e)}")]
+        return [types.TextContent(type="text", text=f"Error adding entry frontmatter: {str(e)}")]
 
 
 def _create_description_generation_prompt(entries: List[Dict[str, str]]) -> str:

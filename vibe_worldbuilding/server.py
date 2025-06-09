@@ -23,7 +23,6 @@ from .prompts.entries import handle_entry_prompt, ENTRY_PROMPT_HANDLERS
 from .prompts.workflow import handle_workflow_prompt, WORKFLOW_PROMPT_HANDLERS
 
 # Import tool handlers
-from .tools.content import handle_content_tool, CONTENT_HANDLERS
 from .tools.world import handle_world_tool, WORLD_HANDLERS
 from .tools.taxonomy import handle_taxonomy_tool, TAXONOMY_HANDLERS
 from .tools.entries import handle_entry_tool, ENTRY_HANDLERS
@@ -65,7 +64,6 @@ ALL_PROMPT_HANDLERS = {
 
 # All tool handlers combined
 ALL_TOOL_HANDLERS = {
-    **CONTENT_HANDLERS,
     **WORLD_HANDLERS,
     **TAXONOMY_HANDLERS,
     **ENTRY_HANDLERS,
@@ -139,9 +137,7 @@ async def handle_call_tool(name: str, arguments: dict[str, Any] | None) -> list[
     """Handle tool calls for worldbuilding operations."""
     try:
         # Route to appropriate tool handler based on tool name
-        if name in CONTENT_HANDLERS:
-            return await handle_content_tool(name, arguments)
-        elif name in WORLD_HANDLERS:
+        if name in WORLD_HANDLERS:
             return await handle_world_tool(name, arguments)
         elif name in TAXONOMY_HANDLERS:
             return await handle_taxonomy_tool(name, arguments)

@@ -17,49 +17,9 @@ from .utilities import (
 )
 
 
-async def identify_stub_candidates(arguments: dict[str, Any] | None) -> list[types.TextContent]:
-    """Analyze entry content and present it to client LLM for stub candidate identification.
-    
-    Creates a comprehensive analysis prompt that includes world context,
-    existing taxonomies, and existing entries to help the LLM identify
-    entities that should become stub entries.
-    
-    Args:
-        arguments: Tool arguments containing world_directory, entry_content, entry_name, and taxonomy
-        
-    Returns:
-        List containing analysis prompt for the client LLM
-    """
-    if not arguments:
-        return [types.TextContent(type="text", text="Error: No arguments provided")]
-    
-    world_directory = arguments.get("world_directory", "")
-    entry_content = arguments.get("entry_content", "")
-    entry_name = arguments.get("entry_name", "")
-    taxonomy = arguments.get("taxonomy", "")
-    
-    if not all([world_directory, entry_content, entry_name, taxonomy]):
-        return [types.TextContent(type="text", text="Error: All parameters (world_directory, entry_content, entry_name, taxonomy) are required")]
-    
-    try:
-        world_path = Path(world_directory)
-        if not world_path.exists():
-            return [types.TextContent(type="text", text=f"Error: World directory {world_directory} does not exist")]
-        
-        # Get world context
-        existing_taxonomies = get_existing_taxonomies(world_path)
-        existing_entries = get_existing_entries_with_descriptions(world_path)
-        
-        # Create analysis prompt
-        analysis_prompt = _create_analysis_prompt(
-            entry_name, taxonomy, entry_content, existing_taxonomies, existing_entries
-        )
-        
-        return [types.TextContent(type="text", text=analysis_prompt)]
-        
-    except Exception as e:
-        return [types.TextContent(type="text", text=f"Error analyzing entry for stub candidates: {str(e)}")]
-
+# identify_stub_candidates function REMOVED
+# This functionality is already built into create_world_entry.
+# Stub analysis is automatically provided when creating entries.
 
 async def create_stub_entries(arguments: dict[str, Any] | None) -> list[types.TextContent]:
     """Create multiple stub entries based on LLM analysis.
