@@ -56,10 +56,10 @@ Choose a category that's important to your world and we'll create a systematic c
 3. Examples of each category
 4. Relationships between categories
 
-What type of classification system interests you most for your world?"""
-                )
+What type of classification system interests you most for your world?""",
+                ),
             )
-        ]
+        ],
     )
 
 
@@ -71,17 +71,17 @@ TAXONOMY_PROMPT_HANDLERS = {
 
 def handle_taxonomy_prompt(name: str) -> types.GetPromptResult:
     """Handle taxonomy-related prompt requests.
-    
+
     Args:
         name: Prompt name
-        
+
     Returns:
         GetPromptResult for the requested prompt
-        
+
     Raises:
         ValueError: If prompt name is not recognized
     """
     if name not in TAXONOMY_PROMPT_HANDLERS:
         raise ValueError(f"Unknown taxonomy prompt: {name}")
-    
+
     return TAXONOMY_PROMPT_HANDLERS[name]()

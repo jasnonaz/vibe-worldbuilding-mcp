@@ -86,6 +86,14 @@ vibe_worldbuilding/
 4. **Integration**: Connect to main server with minimal coupling
 5. **Testing**: Verify functionality works end-to-end
 
+### Debugging Common Issues
+**When code doesn't behave as expected, it's usually logical flow issues, NOT caching:**
+- **Multiple functions**: Check if there are multiple similar functions being called
+- **Tool routing**: Verify the correct handler is being invoked by the MCP server
+- **Parameter flow**: Trace how arguments flow through the call stack
+- **Function precedence**: Look for function name conflicts or import issues
+- **Don't assume caching**: Module import issues are rare - focus on logic first
+
 ### Code Quality Standards
 - **ALWAYS run tests before committing**: Use `python tests/test_e2e_simple.py` or comprehensive tests
 - Run `python scripts/lint.py` before committing
@@ -99,6 +107,13 @@ vibe_worldbuilding/
 - **Integration tests**: MCP tool workflow verification
 - **Test isolation**: Automated cleanup of test worlds
 - **CI/CD ready**: Structured test suite in `tests/` directory
+
+## Worldbuilding Workflow and Site Building
+- **Check the workflow documentation**: For detailed worldbuilding instructions and site building, refer to `docs/COMPLETE_WORKFLOW.md`
+- **Building static sites**: Use the MCP tool `mcp__vibe-worldbuilding__build_static_site` with parameters:
+  - `world_directory`: Path to the world folder
+  - `action`: "build" (to generate static files)
+- **Complete workflow phases**: The workflow document outlines all phases from world foundation through publication
 
 ## Important Instruction Reminders
 - Do what has been asked; nothing more, nothing less

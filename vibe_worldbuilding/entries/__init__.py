@@ -10,18 +10,16 @@ Public API:
     - add_entry_frontmatter: Apply LLM-generated descriptions to entry files
 """
 
+from .content_processing import add_entry_frontmatter, generate_entry_descriptions
+
 # Import public API functions
 from .creation import create_world_entry
 from .stub_generation import create_stub_entries
-from .content_processing import (
-    generate_entry_descriptions,
-    add_entry_frontmatter
-)
 
 # Re-export for backward compatibility with existing tools/entries.py interface
 __all__ = [
     "create_world_entry",
     "create_stub_entries",
     "generate_entry_descriptions",
-    "add_entry_frontmatter"
+    "add_entry_frontmatter",
 ]

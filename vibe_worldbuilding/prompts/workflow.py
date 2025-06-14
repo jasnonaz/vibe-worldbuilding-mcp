@@ -56,10 +56,10 @@ I'll help identify:
 3. Opportunities to strengthen connections
 4. Suggestions for resolving issues
 
-What aspects of your world would you like to review for consistency?"""
-                )
+What aspects of your world would you like to review for consistency?""",
+                ),
             )
-        ]
+        ],
     )
 
 
@@ -114,10 +114,10 @@ You can share:
 - An area where you feel something is missing
 - Content that doesn't feel quite right
 
-What would you like to work on improving?"""
-                )
+What would you like to work on improving?""",
+                ),
             )
-        ]
+        ],
     )
 
 
@@ -130,17 +130,17 @@ WORKFLOW_PROMPT_HANDLERS = {
 
 def handle_workflow_prompt(name: str) -> types.GetPromptResult:
     """Handle workflow and revision prompt requests.
-    
+
     Args:
         name: Prompt name
-        
+
     Returns:
         GetPromptResult for the requested prompt
-        
+
     Raises:
         ValueError: If prompt name is not recognized
     """
     if name not in WORKFLOW_PROMPT_HANDLERS:
         raise ValueError(f"Unknown workflow prompt: {name}")
-    
+
     return WORKFLOW_PROMPT_HANDLERS[name]()

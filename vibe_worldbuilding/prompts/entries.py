@@ -51,10 +51,10 @@ Each entry should include:
 4. **Relationships** - Connections to other world elements
 5. **Impact** - Effects on the broader world
 
-What specific element of your world would you like to develop into a detailed entry?"""
-                )
+What specific element of your world would you like to develop into a detailed entry?""",
+                ),
             )
-        ]
+        ],
     )
 
 
@@ -66,17 +66,17 @@ ENTRY_PROMPT_HANDLERS = {
 
 def handle_entry_prompt(name: str) -> types.GetPromptResult:
     """Handle entry-related prompt requests.
-    
+
     Args:
         name: Prompt name
-        
+
     Returns:
         GetPromptResult for the requested prompt
-        
+
     Raises:
         ValueError: If prompt name is not recognized
     """
     if name not in ENTRY_PROMPT_HANDLERS:
         raise ValueError(f"Unknown entry prompt: {name}")
-    
+
     return ENTRY_PROMPT_HANDLERS[name]()
