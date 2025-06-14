@@ -6,6 +6,7 @@ from pathlib import Path
 # Load environment variables from .env file
 try:
     from dotenv import load_dotenv
+
     # Look for .env in the project root
     env_path = Path(__file__).parent.parent / ".env"
     if env_path.exists():
@@ -25,6 +26,7 @@ FAL_API_KEY = os.environ.get("FAL_KEY")
 # Check for optional dependencies
 try:
     import requests
+
     FAL_AVAILABLE = True
 except ImportError:
     FAL_AVAILABLE = False
@@ -40,7 +42,7 @@ MARKDOWN_EXTENSION = ".md"
 IMAGE_EXTENSION = ".png"
 
 # Directory structure
-WORLD_DIRECTORIES = ["overview", "taxonomies", "entries", "images", "notes"]
+WORLD_DIRECTORIES = ["overview", "taxonomies", "entries", "images", "notes", "metadata"]
 CONTENT_SYMLINK_DIRS = ["overview", "taxonomies", "entries"]
 
 # Taxonomy naming patterns
@@ -48,4 +50,4 @@ TAXONOMY_OVERVIEW_SUFFIX = "-overview"
 
 # Build timeouts and limits
 BUILD_TIMEOUT_SECONDS = 300  # 5 minutes
-MAX_DESCRIPTION_LINES = 3
+MAX_DESCRIPTION_LINES = 3  # Optimized for detailed image prompts

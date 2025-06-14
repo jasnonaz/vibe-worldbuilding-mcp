@@ -102,6 +102,13 @@ dist/
 # Generated sites (optional - comment out if you want to commit example sites)
 # example-worlds/*/site/
 
+# Example worlds - ignored by default, unignore specific ones if needed
+example-worlds/*/
+!example-worlds/README.md
+
+# To include a specific example world, add a line like:
+# !example-worlds/specific-world-name/
+
 # Test environments - never commit test artifacts
 test-worlds/*/
 !test-worlds/README.md

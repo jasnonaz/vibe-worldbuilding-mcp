@@ -4,45 +4,45 @@ This is the entry point that coordinates all the modular components:
 prompts, tools, and utilities.
 """
 
-import os
 import asyncio
+import os
 from typing import Any, Sequence
 
-from mcp.server import Server, NotificationOptions
-from mcp.server.models import InitializationOptions
 import mcp.server.stdio
 import mcp.types as types
+from mcp.server import NotificationOptions, Server
+from mcp.server.models import InitializationOptions
 
-from .config import SERVER_NAME, VERSION, FAL_AVAILABLE
-from .types.schemas import get_all_tools
+from .config import FAL_AVAILABLE, SERVER_NAME, VERSION
 
 # Import prompt handlers
-from .prompts.core import handle_core_prompt, CORE_PROMPT_HANDLERS
-from .prompts.taxonomy import handle_taxonomy_prompt, TAXONOMY_PROMPT_HANDLERS
-from .prompts.entries import handle_entry_prompt, ENTRY_PROMPT_HANDLERS
-from .prompts.workflow import handle_workflow_prompt, WORKFLOW_PROMPT_HANDLERS
+from .prompts.core import CORE_PROMPT_HANDLERS, handle_core_prompt
+from .prompts.entries import ENTRY_PROMPT_HANDLERS, handle_entry_prompt
+from .prompts.taxonomy import TAXONOMY_PROMPT_HANDLERS, handle_taxonomy_prompt
+from .prompts.workflow import WORKFLOW_PROMPT_HANDLERS, handle_workflow_prompt
+from .tools.entries import ENTRY_HANDLERS, handle_entry_tool
+from .tools.images import IMAGE_HANDLERS, handle_image_tool
+from .tools.site import SITE_HANDLERS, handle_site_tool
+from .tools.taxonomy import TAXONOMY_HANDLERS, handle_taxonomy_tool
 
 # Import tool handlers
-from .tools.world import handle_world_tool, WORLD_HANDLERS
-from .tools.taxonomy import handle_taxonomy_tool, TAXONOMY_HANDLERS
-from .tools.entries import handle_entry_tool, ENTRY_HANDLERS
-from .tools.images import handle_image_tool, IMAGE_HANDLERS
-from .tools.site import handle_site_tool, SITE_HANDLERS
+from .tools.world import WORLD_HANDLERS, handle_world_tool
+from .types.schemas import get_all_tools
 
 
 # Load environment variables from .env file
 def load_env_file():
     """Load environment variables from .env file if it exists."""
     from pathlib import Path
-    
+
     env_path = Path(__file__).parent.parent / ".env"
-    
+
     if env_path.exists():
-        with open(env_path, 'r') as f:
+        with open(env_path, "r") as f:
             for line in f:
                 line = line.strip()
-                if line and not line.startswith('#') and '=' in line:
-                    key, value = line.split('=', 1)
+                if line and not line.startswith("#") and "=" in line:
+                    key, value = line.split("=", 1)
                     # Only set if not already in environment
                     if key.strip() not in os.environ:
                         os.environ[key.strip()] = value.strip()
@@ -112,7 +112,9 @@ async def handle_list_prompts() -> list[types.Prompt]:
 
 
 @app.get_prompt()
-async def handle_get_prompt(name: str, arguments: dict[str, str] | None) -> types.GetPromptResult:
+async def handle_get_prompt(
+    name: str, arguments: dict[str, str] | None
+) -> types.GetPromptResult:
     """Get a specific worldbuilding prompt."""
     if name in CORE_PROMPT_HANDLERS:
         return handle_core_prompt(name)
@@ -133,7 +135,9 @@ async def handle_list_tools() -> list[types.Tool]:
 
 
 @app.call_tool()
-async def handle_call_tool(name: str, arguments: dict[str, Any] | None) -> list[types.TextContent]:
+async def handle_call_tool(
+    name: str, arguments: dict[str, Any] | None
+) -> list[types.TextContent]:
     """Handle tool calls for worldbuilding operations."""
     try:
         # Route to appropriate tool handler based on tool name
@@ -149,9 +153,13 @@ async def handle_call_tool(name: str, arguments: dict[str, Any] | None) -> list[
             return await handle_site_tool(name, arguments)
         else:
             return [types.TextContent(type="text", text=f"Unknown tool: {name}")]
-            
+
     except Exception as e:
-        return [types.TextContent(type="text", text=f"Error executing tool '{name}': {str(e)}")]
+        return [
+            types.TextContent(
+                type="text", text=f"Error executing tool '{name}': {str(e)}"
+            )
+        ]
 
 
 async def main():

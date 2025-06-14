@@ -39,6 +39,48 @@ export async function getStaticPaths() {
 
 const { taxonomy, entry } = Astro.params;
 
+// Get ALL entries across all taxonomies for auto-linking (moved up before content processing)
+let allEntries: Array<{slug: string, title: string, taxonomy: string, cleanTitle: string}> = [];
+try {
+  const allEntriesPath = join(process.cwd(), 'src/content/entries');
+  const taxonomyDirs = await readdir(allEntriesPath);
+  
+  for (const taxonomyDir of taxonomyDirs) {
+    try {
+      const taxonomyEntriesPath = join(allEntriesPath, taxonomyDir);
+      const files = await readdir(taxonomyEntriesPath);
+      
+      for (const file of files) {
+        if (file.endsWith('.md')) {
+          const entrySlug = file.replace('.md', '');
+          let entryTitle = entrySlug.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+          
+          try {
+            const entryContent = await readFile(join(taxonomyEntriesPath, file), 'utf-8');
+            const titleMatch = entryContent.match(/^# (.+)$/m);
+            if (titleMatch) {
+              entryTitle = titleMatch[1];
+            }
+          } catch {
+            // Use default title
+          }
+          
+          allEntries.push({ 
+            slug: entrySlug, 
+            title: entryTitle, 
+            taxonomy: taxonomyDir,
+            cleanTitle: entryTitle.toLowerCase()
+          });
+        }
+      }
+    } catch {
+      // Skip if not a directory
+    }
+  }
+} catch {
+  // No entries found
+}
+
 // Read entry content
 let entryContent = '';
 let entryTitle = entry?.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) || 'Unknown Entry';
@@ -79,7 +121,7 @@ try {
     entryTitle = titleMatch[1];
   }
   
-  // Simple markdown to HTML conversion
+  // Simple markdown to HTML conversion with auto-linking
   entryContent = contentWithoutFrontmatter
     .replace(/^### (.+)$/gm, '<h3>$1</h3>')
     .replace(/^## (.+)$/gm, '<h2>$1</h2>')
@@ -92,6 +134,29 @@ try {
     .replace(/\n\n/g, '</p><p>')
     .replace(/^(?!<)(.+)$/gm, '<p>$1</p>')
     .replace(/<p><\/p>/g, '');
+    
+  // Auto-link entry names - simple approach
+  for (const entryRef of allEntries) {
+    if (entryRef.slug !== entry && entryContent.includes(entryRef.title)) {
+      // Only process if the entry title appears in the content
+      const escapedTitle = entryRef.title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const linkRegex = new RegExp(`\\b${escapedTitle}\\b`, 'g');
+      
+      // Simple replacement that avoids existing HTML tags
+      entryContent = entryContent.replace(linkRegex, (match) => {
+        // Don't replace if it's already a link or inside HTML tags
+        const beforeContext = entryContent.substring(0, entryContent.indexOf(match));
+        if (beforeContext.includes('<a ') && beforeContext.lastIndexOf('<a ') > beforeContext.lastIndexOf('</a>')) {
+          return match; // Already inside a link
+        }
+        if (beforeContext.includes('<') && beforeContext.lastIndexOf('<') > beforeContext.lastIndexOf('>')) {
+          return match; // Inside an HTML tag
+        }
+        
+        return `<a href="/taxonomies/${entryRef.taxonomy}/entries/${entryRef.slug}" style="color: #007acc; text-decoration: underline;">${match}</a>`;
+      });
+    }
+  }
 } catch {
   entryContent = `<h1>${entryTitle}</h1><p>Entry content not found.</p>`;
 }
@@ -134,6 +199,7 @@ try {
 } catch {
   // No images directory
 }
+
 
 // Get other entries in this taxonomy for navigation
 let otherEntries: Array<{slug: string, title: string, isStub: boolean}> = [];

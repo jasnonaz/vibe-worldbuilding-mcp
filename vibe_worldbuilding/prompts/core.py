@@ -31,10 +31,10 @@ Think about the core concept that makes your world unique. This could be:
 
 Take your time to describe your initial idea. Don't worry about details yet - we'll develop those together.
 
-What draws you to this world concept? What excites you about exploring it further?"""
-                )
+What draws you to this world concept? What excites you about exploring it further?""",
+                ),
             )
-        ]
+        ],
     )
 
 
@@ -61,10 +61,10 @@ To help me understand where we are in your world's development, please share:
 
 You can also paste any existing content you'd like me to review or build upon.
 
-What aspect of your world is calling to you today?"""
-                )
+What aspect of your world is calling to you today?""",
+                ),
             )
-        ]
+        ],
     )
 
 
@@ -107,10 +107,10 @@ We'll work together to create a foundational document that captures:
 3. Key themes and tone
 4. Scope and boundaries
 
-What aspect would you like to start with?"""
-                )
+What aspect would you like to start with?""",
+                ),
             )
-        ]
+        ],
     )
 
 
@@ -169,10 +169,10 @@ Here's a systematic approach to building rich, cohesive fictional worlds:
 - Keep good records of what you've created
 - Use clear organization and naming
 
-Where are you in this process, and what would help you move forward?"""
-                )
+Where are you in this process, and what would help you move forward?""",
+                ),
             )
-        ]
+        ],
     )
 
 
@@ -187,17 +187,17 @@ CORE_PROMPT_HANDLERS = {
 
 def handle_core_prompt(name: str) -> types.GetPromptResult:
     """Handle core worldbuilding prompt requests.
-    
+
     Args:
         name: Prompt name
-        
+
     Returns:
         GetPromptResult for the requested prompt
-        
+
     Raises:
         ValueError: If prompt name is not recognized
     """
     if name not in CORE_PROMPT_HANDLERS:
         raise ValueError(f"Unknown core prompt: {name}")
-    
+
     return CORE_PROMPT_HANDLERS[name]()
