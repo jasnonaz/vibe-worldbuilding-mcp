@@ -99,34 +99,14 @@ try {
     taxonomies.push({ name: taxonomyName, description, entries });
   }
   
-  // Check for overview images in public directory
-  try {
-    const publicImagesPath = join(process.cwd(), 'public', 'images');
-    const imageDirs = await readdir(publicImagesPath);
-    
-    if (imageDirs.length > 0) {
-      const worldImageDir = imageDirs[0];
-      const imagesPath = join(publicImagesPath, worldImageDir);
-      const imageFiles = await readdir(imagesPath);
-      
-      // Look for specific overview images
-      const headerImage = imageFiles.find(file => file === 'world-overview-header.png');
-      const atmosphereImage = imageFiles.find(file => file === 'world-overview-atmosphere.png');
-      const conceptImage = imageFiles.find(file => file === 'world-overview-concept.png');
-      
-      if (headerImage) {
-        headerImagePath = `/images/${worldImageDir}/${headerImage}`;
-      }
-      if (atmosphereImage) {
-        atmosphereImagePath = `/images/${worldImageDir}/${atmosphereImage}`;
-      }
-      if (conceptImage) {
-        conceptImagePath = `/images/${worldImageDir}/${conceptImage}`;
-      }
-    }
-  } catch {
-    // No images directory or error reading
-  }
+  // Check for overview images in the world's images directory
+  // Images will be copied to the site during build, so they'll be at /images/
+  const worldName = basename(process.cwd());
+  
+  // Set image paths - these will exist after the build copies them
+  headerImagePath = `/images/world-overview-header.png`;
+  atmosphereImagePath = `/images/world-overview-atmosphere.png`;
+  conceptImagePath = `/images/world-overview-concept.png`;
 } catch (error) {
   console.error('Error reading world content:', error);
 }

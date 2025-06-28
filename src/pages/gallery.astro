@@ -24,87 +24,103 @@ try {
     worldTitle = titleMatch[1];
   }
 
-  // Get images from public directory
-  const publicImagesPath = join(process.cwd(), 'public', 'images');
-  const imageDirs = await readdir(publicImagesPath);
-  
-  if (imageDirs.length > 0) {
-    const worldImageDir = imageDirs[0]; // Use first world directory found
-    const worldImagesPath = join(publicImagesPath, worldImageDir);
+  // During development, we need to find the world's images directory
+  // In production, images will be copied to the site
+  try {
+    // First, try to find the world directory by resolving the symlink
+    const overviewSymlinkPath = join(process.cwd(), 'src/content/overview');
+    const { realpathSync } = await import('fs');
+    let worldPath = '';
     
-    // Get all image files recursively
-    async function getImagesRecursively(dirPath: string, category: string = ''): Promise<void> {
-      const items = await readdir(dirPath, { withFileTypes: true });
-      
-      for (const item of items) {
-        const fullPath = join(dirPath, item.name);
-        
-        if (item.isDirectory()) {
-          // Recursively process subdirectories
-          const subCategory = category ? `${category}/${item.name}` : item.name;
-          await getImagesRecursively(fullPath, subCategory);
-        } else if (item.isFile() && ['.png', '.jpg', '.jpeg', '.gif', '.webp'].includes(extname(item.name).toLowerCase())) {
-          // This is an image file
-          const relativePath = `/images/${worldImageDir}/${category ? category + '/' : ''}${item.name}`;
-          const fileName = basename(item.name, extname(item.name));
-          const displayName = fileName.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-          
-          const categoryName = category || 'General';
-          const categoryDisplay = categoryName.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-          
-          // Determine the source link and type
-          let entryLink: string | undefined;
-          let entryType: 'entry' | 'taxonomy' | 'overview' | undefined;
-          let description = `${displayName} from ${categoryDisplay}`;
-          
-          if (fileName.includes('world-overview')) {
-            // This is a world overview image
-            entryLink = '/';
-            entryType = 'overview';
-            description = `${displayName} - Click to view world overview`;
-          } else if (fileName.endsWith('-taxonomy')) {
-            // This is a taxonomy overview image
-            const taxonomyName = fileName.replace('-taxonomy', '');
-            entryLink = `/taxonomies/${taxonomyName}`;
-            entryType = 'taxonomy';
-            description = `${displayName} - Click to view ${categoryDisplay} taxonomy`;
-          } else if (category && category !== 'General') {
-            // This should be an entry image - check if corresponding entry exists
-            try {
-              const entriesPath = join(process.cwd(), 'src/content/entries', category);
-              const entryFiles = await readdir(entriesPath);
-              const matchingEntry = entryFiles.find(entryFile => {
-                const entryName = basename(entryFile, '.md');
-                return entryName === fileName;
-              });
-              
-              if (matchingEntry) {
-                entryLink = `/taxonomies/${category}/entries/${fileName}`;
-                entryType = 'entry';
-                description = `${displayName} - Click to view entry`;
-              }
-            } catch {
-              // Entry directory doesn't exist or other error
-            }
-          }
-          
-          images.push({
-            src: relativePath,
-            alt: displayName,
-            title: displayName,
-            category: categoryDisplay,
-            description,
-            entryLink,
-            entryType
-          });
-        }
-      }
+    try {
+      const realOverviewPath = realpathSync(overviewSymlinkPath);
+      // The world directory is the parent of the overview directory
+      worldPath = join(realOverviewPath, '..');
+    } catch {
+      // Symlink resolution failed
     }
     
-    await getImagesRecursively(worldImagesPath);
+    // Get images from the world's images directory
+    const worldImagesPath = worldPath ? join(worldPath, 'images') : '';
+    
+    const fs = await import('fs');
+    if (worldImagesPath && fs.existsSync(worldImagesPath)) {
+      // Get all image files recursively
+      async function getImagesRecursively(dirPath: string, category: string = ''): Promise<void> {
+        const items = await readdir(dirPath, { withFileTypes: true });
+        
+        for (const item of items) {
+          const fullPath = join(dirPath, item.name);
+          
+          if (item.isDirectory()) {
+            // Recursively process subdirectories
+            const subCategory = category ? `${category}/${item.name}` : item.name;
+            await getImagesRecursively(fullPath, subCategory);
+          } else if (item.isFile() && ['.png', '.jpg', '.jpeg', '.gif', '.webp'].includes(extname(item.name).toLowerCase())) {
+            // This is an image file
+            const relativePath = `/images/${category ? category + '/' : ''}${item.name}`;
+            const fileName = basename(item.name, extname(item.name));
+            const displayName = fileName.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+            
+            const categoryName = category || 'General';
+            const categoryDisplay = categoryName.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+            
+            // Determine the source link and type
+            let entryLink: string | undefined;
+            let entryType: 'entry' | 'taxonomy' | 'overview' | undefined;
+            let description = `${displayName} from ${categoryDisplay}`;
+            
+            if (fileName.includes('world-overview')) {
+              // This is a world overview image
+              entryLink = '/';
+              entryType = 'overview';
+              description = `${displayName} - Click to view world overview`;
+            } else if (fileName.endsWith('-taxonomy')) {
+              // This is a taxonomy overview image
+              const taxonomyName = fileName.replace('-taxonomy', '');
+              entryLink = `/taxonomies/${taxonomyName}`;
+              entryType = 'taxonomy';
+              description = `${displayName} - Click to view ${categoryDisplay} taxonomy`;
+            } else if (category && category !== 'General') {
+              // This should be an entry image - check if corresponding entry exists
+              try {
+                const entriesPath = join(process.cwd(), 'src/content/entries', category);
+                const entryFiles = await readdir(entriesPath);
+                const matchingEntry = entryFiles.find(entryFile => {
+                  const entryName = basename(entryFile, '.md');
+                  return entryName === fileName;
+                });
+                
+                if (matchingEntry) {
+                  entryLink = `/taxonomies/${category}/entries/${fileName}`;
+                  entryType = 'entry';
+                  description = `${displayName} - Click to view entry`;
+                }
+              } catch {
+                // Entry directory doesn't exist or other error
+              }
+            }
+            
+            images.push({
+              src: relativePath,
+              alt: displayName,
+              title: displayName,
+              category: categoryDisplay,
+              description,
+              entryLink,
+              entryType
+            });
+          }
+        }
+      }
+      
+      await getImagesRecursively(worldImagesPath);
+    }
+  } catch (error) {
+    console.error('Error loading gallery images:', error);
   }
 } catch (error) {
-  console.error('Error loading gallery images:', error);
+  console.error('Error reading world content:', error);
 }
 
 // Sort images by category, then by title

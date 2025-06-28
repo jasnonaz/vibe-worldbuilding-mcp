@@ -161,44 +161,10 @@ try {
   entryContent = `<h1>${entryTitle}</h1><p>Entry content not found.</p>`;
 }
 
-// Check for entry image in public directory
+// Check for entry image - images are copied to site during build
 let entryImagePath = '';
-try {
-  const publicImagesPath = join(process.cwd(), 'public', 'images');
-  const imageDirs = await readdir(publicImagesPath);
-  
-  if (imageDirs.length > 0) {
-    const worldImageDir = imageDirs[0];
-    
-    // Try taxonomy subdirectory first
-    try {
-      const imagesPath = join(publicImagesPath, worldImageDir, taxonomy!);
-      const imageFiles = await readdir(imagesPath);
-      const entryImage = imageFiles.find(file => 
-        file.startsWith(entry!) && (file.endsWith('.png') || file.endsWith('.jpg') || file.endsWith('.jpeg'))
-      );
-      if (entryImage) {
-        entryImagePath = `/images/${worldImageDir}/${taxonomy}/${entryImage}`;
-      }
-    } catch {
-      // Try root images directory
-      try {
-        const imagesPath = join(publicImagesPath, worldImageDir);
-        const imageFiles = await readdir(imagesPath);
-        const entryImage = imageFiles.find(file => 
-          file.startsWith(entry!) && (file.endsWith('.png') || file.endsWith('.jpg') || file.endsWith('.jpeg'))
-        );
-        if (entryImage) {
-          entryImagePath = `/images/${worldImageDir}/${entryImage}`;
-        }
-      } catch {
-        // No entry image
-      }
-    }
-  }
-} catch {
-  // No images directory
-}
+// Look for entry images in the taxonomy subdirectory
+entryImagePath = `/images/${taxonomy}/${entry}.png`;
 
 
 // Get other entries in this taxonomy for navigation
@@ -303,15 +269,6 @@ const taxonomyTitle = taxonomy?.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpp
         <strong>Topic Context:</strong> {taxonomyContext}
       </div>
     )}
-
-    {entryImagePath && (
-      <img 
-        src={entryImagePath} 
-        alt={entryTitle}
-        class="content-image"
-        style="max-height: 400px; object-fit: cover; width: 100%;"
-      />
-    )}
   </div>
 
   <div style="display: grid; gap: 2rem; grid-template-columns: 300px 1fr; margin-top: 2rem;">
@@ -347,6 +304,17 @@ const taxonomyTitle = taxonomy?.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpp
     </aside>
     
     <article style="padding: 2rem;">
+      {entryImagePath && (
+        <div style="margin-bottom: 2rem; overflow: hidden; border-radius: 8px; max-width: 600px;">
+          <img 
+            src={entryImagePath} 
+            alt={`${entryTitle} illustration`}
+            style="width: 100%; height: auto;"
+            onError="this.style.display='none'"
+          />
+        </div>
+      )}
+      
       <div set:html={entryContent} />
       
       <div class="entry-meta">

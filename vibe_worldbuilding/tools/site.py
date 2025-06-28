@@ -142,10 +142,19 @@ async def _handle_build_action(
     """
     world_name = world_path.name
 
+    # Clean up any world-specific images from public directory before build
+    # This prevents Astro from including stale world images in the dist output
+    public_images_dir = script_dir / "public" / "images"
+    if public_images_dir.exists():
+        # Remove any directories that look like world names (contain timestamp suffix)
+        for item in public_images_dir.iterdir():
+            if item.is_dir() and "-2025" in item.name:  # World dirs have timestamp
+                shutil.rmtree(item)
+
     # Set up symlinks for build
     temp_world_link = _setup_world_symlink(script_dir, world_path, world_name)
     _setup_content_symlinks(script_dir, world_path)
-    _setup_public_images(script_dir, world_path, world_name)
+    # Don't copy images to public - they should stay in the world directory
 
     try:
         # Build the static site
@@ -284,30 +293,7 @@ def _setup_content_symlinks(script_dir: Path, world_path: Path) -> None:
             link_path.symlink_to(source_path.absolute())
 
 
-def _setup_public_images(script_dir: Path, world_path: Path, world_name: str) -> None:
-    """Copy images and favicon to the public directory for the build.
-
-    Args:
-        script_dir: Path to the project root directory
-        world_path: Path to the world directory
-        world_name: Name of the world
-    """
-    world_images_path = world_path / "images"
-    public_images_path = script_dir / "public" / "images" / world_name
-
-    if world_images_path.exists():
-        # Remove existing public images for this world
-        if public_images_path.exists():
-            shutil.rmtree(public_images_path)
-
-        # Copy images to public directory
-        shutil.copytree(world_images_path, public_images_path)
-
-        # Copy favicon to public root if it exists
-        favicon_source = world_images_path / "favicon.png"
-        if favicon_source.exists():
-            favicon_dest = script_dir / "public" / "favicon.png"
-            shutil.copy2(favicon_source, favicon_dest)
+# Removed _setup_public_images - images now stay in world directory
 
 
 def _handle_successful_build(
@@ -335,6 +321,16 @@ def _handle_successful_build(
     # Move the built site
     if source_dist.exists():
         shutil.move(str(source_dist), str(target_site))
+        
+        # Copy the world's images directory to the site
+        world_images_path = world_path / "images"
+        if world_images_path.exists():
+            site_images_path = target_site / "images"
+            # Important: Remove the entire images directory first to avoid accumulation
+            if site_images_path.exists():
+                shutil.rmtree(site_images_path)
+            # Copy only this world's images
+            shutil.copytree(world_images_path, site_images_path)
 
         # Count generated files
         html_files = list(target_site.rglob("*.html"))
@@ -368,11 +364,6 @@ def _cleanup_build_artifacts(
     # Clean up the temporary world symlink only
     if temp_world_link.exists() or temp_world_link.is_symlink():
         temp_world_link.unlink()
-
-    # Clean up public images (these get copied, not symlinked)
-    public_images_path = script_dir / "public" / "images" / world_name
-    if public_images_path.exists():
-        shutil.rmtree(public_images_path)
 
     # DO NOT clean up content symlinks - they should persist for the site to work!
 
