@@ -108,7 +108,8 @@ example-worlds/*/
 
 # To include a specific example world, add a line like:
 # !example-worlds/specific-world-name/
-!example-worlds/the-republic's-dawn-20250614-094013/
+!example-worlds/the-eternal-decay-20250622-135244/
+!example-worlds/the-covenant-of-realms-20250623-201933/
 
 # Test environments - never commit test artifacts
 test-worlds/*/
